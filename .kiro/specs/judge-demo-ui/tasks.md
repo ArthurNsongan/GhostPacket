@@ -1,0 +1,26 @@
+# Implementation plan — Judge demo UI
+
+- [x] 1. Next.js base (static export, strict TypeScript, Tailwind v4)
+  - _Requirements: 7.3_
+- [x] 2. `wasm-bridge.ts`: local loading, typed results, per-operation timing
+  - _Requirements: 1.3_
+- [x] 3. `audio-engine.ts` and `optical-engine.ts` engines (loopback, speaker, microphone, camera)
+  - _Requirements: 4.1, 6.1_
+- [x] 4. `demo-runner.ts`: cancellable 1-click scenario
+  - _Requirements: 1.1, 1.2, 1.3_
+- [x] 5. Components
+  - [x] 5.1 `JudgeQuickDemoBar`
+  - [x] 5.2 `PayloadComposer` (presets, JSON editor, byte budget, QR screen)
+  - [x] 5.3 `ChannelControls` (sliders, oscilloscope, QR history, curse)
+  - [x] 5.4 `SpectrogramCanvas`, `FountainGridCanvas`, `ResultCard`
+  - [x] 5.5 `FrameInspector`
+  - [x] 5.6 `FieldModeView` with automatic fallback
+  - _Requirements: 2.*, 3.*, 4.*, 5.*, 6.*_
+- [x] 6. Spectral Telemetry visual system, self-hosted fonts, `prefers-reduced-motion`
+  - _Requirements: 7.1, 7.2, 7.3_
+- [x] 7. English UI copy and English WASM error messages
+  - _Requirements: 4.4, 7.3_
+- [x] 8. Headless Chrome check: demo in ≈ 15 s, field receiver with fake mic and camera, 0 console error, 0 external request
+  - _Requirements: 1.4, 6.1_
+- [ ] 9. Physical PC ↔ phone test (real mic and camera) and 3-minute video
+  - _Requirements: 6.1_

@@ -1,0 +1,25 @@
+# Implementation plan — Acoustic modem
+
+- [x] 1. Reed-Solomon GF(256) (`fec.rs`)
+  - [x] 1.1 exp/log tables as `const fn`
+  - [x] 1.2 Systematic encoding, BM + Chien + Forney decoding
+  - [x] 1.3 Tests: 0 to 8 errors corrected on RS(255,239), RS(6,2) header
+  - _Requirements: 2.1, 2.2, 2.3_
+- [x] 2. CPFSK modulator (`fsk::modulate`)
+  - _Requirements: 1.1–1.5_
+- [x] 3. Demodulator (`fsk::demodulate`)
+  - [x] 3.1 Two-pass preamble search + plateau centre
+  - [x] 3.2 Goertzel symbol reader + SNR metrics
+  - [x] 3.3 Errors `FSK_NO_PREAMBLE`, `FSK_TOO_SHORT`, `FSK_INCOMPLETE`, `TOO_MANY_SAMPLES`
+  - _Requirements: 3.1–3.7_
+- [x] 4. Hann FFT 1024 spectrum (`SpectrumAnalyzer`)
+  - _Requirements: 5.1_
+- [x] 5. Fuzzing `tests/noise_fsk_fuzz.rs` (hook `fuzz-noise-channel`)
+  - _Requirements: 4.1, 4.2, 4.3_
+- [x] 5b. Early-late clock tracking + ±300 ppm drift and echo test
+  - _Requirements: 4.4_
+- [x] 6. Web audio engine (`web/src/lib/audio-engine.ts`)
+  - [x] 6.1 Virtual loopback: PCM → AWGN → spectrogram → demodulation
+  - [x] 6.2 Speaker playback
+  - [x] 6.3 Microphone capture, periodic demodulation on a ring buffer
+  - _Requirements: 1.5, 3.3, 3.4_

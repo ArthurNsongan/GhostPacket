@@ -1,0 +1,19 @@
+{
+  "name": "ghostpacket-inspector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server (stdio) exposing GhostPacket frame inspection, channel benchmarks and Kiroween compliance checks to Kiro.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "smoke": "node src/smoke.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "^4.0.0"
+  }
+}

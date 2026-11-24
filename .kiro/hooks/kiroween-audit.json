@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "kiroween-audit",
+      "description": "End-of-task audit: .kiro/ tracked by git, no external AI tool files, MIT licence, no client secret, zero panic in Rust, WASM size, full Rust suite and TypeScript type check.",
+      "trigger": "Stop",
+      "action": {
+        "type": "command",
+        "command": "node scripts/kiroween-audit.mjs --full"
+      },
+      "timeout": 900
+    }
+  ]
+}

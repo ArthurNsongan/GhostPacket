@@ -1,0 +1,126 @@
+# ==============================================================================
+# GhostPacket — .gitignore
+# ==============================================================================
+# IMPORTANT : Le répertoire /.kiro/ DOIT rester suivi par Git (specs, steering,
+# hooks, settings). Ne JAMAIS ajouter .kiro/ dans ce fichier.
+# ==============================================================================
+
+!.kiro/
+!.kiro/**
+
+# ------------------------------------------------------------------------------
+# Outils d'assistance, agents tiers & éditeurs externes (exclus du dépôt)
+# ------------------------------------------------------------------------------
+.agent/
+.agents/
+.aider*
+.amazonq/
+.amp/
+.antigravity/
+.augment/
+.bolt/
+.claude/
+.cline/
+.clinerules/
+.codeium/
+.codex/
+.continue/
+.copilot/
+.cursor/
+.factory/
+.gemini/
+.github/copilot*
+.goose/
+.idea/
+.idx/
+.junie/
+.lovable/
+.opencode/
+.qoder/
+.replit
+.roo/
+.roocode/
+.supermaven/
+.tabnine/
+.trae/
+.v0/
+.vscode/
+.windsurf/
+.zed/
+
+# Fichiers de règles, instructions ou configurations d'outils externes
+AGENT.md
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+CODEX.md
+COPILOT.md
+CURSOR.md
+GEMINI.md
+.aider*
+.clineignore
+.clinerules
+.continueignore
+.cursorignore
+.cursorindexingignore
+.cursorrules
+.mcp.json
+.rooignore
+.roomodes
+.roorules
+.windsurfignore
+.windsurfrules
+opencode.json
+*.antigravity*
+
+# ------------------------------------------------------------------------------
+# Rust / Cargo / WebAssembly
+# (Cargo.lock est volontairement conservé pour le déterminisme des builds WASM)
+# ------------------------------------------------------------------------------
+target/
+**/target/
+**/*.rs.bk
+*.pdb
+wasm-pack.log
+crates/**/pkg/
+
+# ------------------------------------------------------------------------------
+# Node.js / Next.js / TypeScript
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+.next/
+**/out/
+.vercel/
+.turbo/
+.eslintcache
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------------------------
+# Environnement & Secrets (US: zéro secret exposé ou versionné)
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# ------------------------------------------------------------------------------
+# Système d'exploitation & fichiers temporaires
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+*.tmp
+*.log

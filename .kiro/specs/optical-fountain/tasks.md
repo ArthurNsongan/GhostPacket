@@ -1,0 +1,21 @@
+# Implementation plan — Optical fountain codes
+
+- [x] 1. `xorshift64*` + splitmix64 PRNG, draws on the high bits
+  - _Requirements: 1.3_
+- [x] 2. Degree distribution with a dense spike
+  - _Requirements: 2.1_
+- [x] 3. `FountainEncoder` (30 B droplets, CRC16)
+  - _Requirements: 1.1, 1.2_
+- [x] 4. `FountainDecoder`
+  - [x] 4.1 CRC16, session and duplicate checks
+  - [x] 4.2 Peeling with cascade and depth
+  - [x] 4.3 Gauss-Jordan GF(2) fallback
+  - [x] 4.4 Bounded memory
+  - _Requirements: 3.1–3.7_
+- [x] 5. Fuzzing `tests/optical_fountain_fuzz.rs` (30/40/50 %, 100 seeds)
+  - _Requirements: 4.1–4.4_
+- [x] 6. Web optical engine (`web/src/lib/optical-engine.ts`)
+  - [x] 6.1 Alphanumeric QR rendering on canvas
+  - [x] 6.2 Loopback: canvas → jsQR → FountainRx, simulated loss
+  - [x] 6.3 Rear camera + BarcodeDetector, jsQR fallback
+  - _Requirements: 1.4, 5.1, 5.2_

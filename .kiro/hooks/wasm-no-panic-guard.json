@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "wasm-no-panic-guard",
+      "description": "Rejects any .unwrap(), .expect(, panic!(, todo!(, unimplemented!( or unreachable!( in crates/ghostpacket-core/src outside #[cfg(test)] (rule from .kiro/steering/wasm-determinism.md).",
+      "trigger": "PostFileSave",
+      "matcher": "crates[\\\\/]ghostpacket-core[\\\\/]src[\\\\/].*\\.rs$",
+      "action": {
+        "type": "command",
+        "command": "node scripts/no-panic-guard.mjs"
+      },
+      "timeout": 30
+    }
+  ]
+}

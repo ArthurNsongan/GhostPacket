@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ghostpacket-inspector": {
+      "command": "node",
+      "args": ["mcp-server/src/index.ts"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": ["inspect_frame_hex", "check_kiroween_compliance"]
+    }
+  }
+}

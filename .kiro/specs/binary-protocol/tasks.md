@@ -1,0 +1,23 @@
+# Implementation plan — Binary protocol
+
+- [x] 1. Stable error codes and English messages (`error.rs`)
+  - _Requirements: 3.1–3.9_
+- [x] 2. Document schema + bounds (`schema.rs`)
+  - [x] 2.1 Three document types, `postcard` serialization
+  - [x] 2.2 Field validation on encode and on decode
+  - _Requirements: 2.1, 2.3, 3.7_
+- [x] 3. Ed25519 and fingerprint (`crypto.rs`)
+  - _Requirements: 2.3, 3.9, 5.1_
+- [x] 4. Frame encoding (`protocol::encode_frame`)
+  - [x] 4.1 Conditional LZ4 with size prefix
+  - [x] 4.2 CRC32 then signature
+  - _Requirements: 1.1–1.5, 2.2, 2.4_
+- [x] 5. Ordered verification (`protocol::decode_and_verify_frame`)
+  - _Requirements: 3.1–3.9_
+- [x] 6. Field-by-field inspection (`protocol::inspect_frame`)
+  - _Requirements: 4.1, 4.2_
+- [x] 7. Tests `tests/protocol_vectors.rs`
+  - [x] 7.1 Round-trip of the 3 presets, payload 150–300 B
+  - [x] 7.2 Flipping each bit of each preset is rejected
+  - [x] 7.3 Structural codes, LZ4 bomb, keyring, oversized payload
+  - _Requirements: 1.*, 2.*, 3.*_

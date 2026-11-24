@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "ts-typecheck-on-save",
+      "description": "Strict TypeScript type check (tsc --noEmit) on every change under web/src.",
+      "trigger": "PostFileSave",
+      "matcher": "web[\\\\/]src[\\\\/].*\\.(ts|tsx)$",
+      "action": {
+        "type": "command",
+        "command": "npm --prefix web run typecheck"
+      },
+      "timeout": 120
+    }
+  ]
+}
