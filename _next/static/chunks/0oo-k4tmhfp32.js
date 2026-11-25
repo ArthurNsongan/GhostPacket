@@ -1,1 +1,0 @@
-(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,54816,t=>{t.q("/GhostPacket/_next/static/media/ghostpacket_core_bg.111o95aj8i4vk.wasm")}]);
