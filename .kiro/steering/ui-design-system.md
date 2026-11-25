@@ -1,13 +1,13 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["web/src/**/*.ts", "web/src/**/*.tsx", "web/src/**/*.css"]
+fileMatchPattern: ["apps/*/src/**/*.ts", "apps/*/src/**/*.tsx", "apps/*/src/**/*.css", "packages/ghostpacket-ui/src/**/*.tsx"]
 ---
 
 # "Spectral Telemetry" visual system
 
 Full reference: #[[file:UI_DESIGN_GUIDELINES.md]]
 
-## Tokens (defined in `web/src/app/globals.css`, `@theme` block)
+## Tokens (defined in `apps/portal/src/app/globals.css`, `@theme` block)
 | Tailwind class | Hex | Meaning |
 |---|---|---|
 | `void` | `#07080B` | background (`--bg-abyss`) |

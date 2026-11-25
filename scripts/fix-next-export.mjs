@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const out = process.argv[2] ?? join(fileURLToPath(import.meta.url), "..", "..", "web", "out");
+const out = process.argv[2] ?? join(fileURLToPath(import.meta.url), "..", "..", "apps", "portal", "out");
 if (!existsSync(out)) {
   console.error(`fix-next-export: ${out} not found`);
   process.exit(1);

@@ -127,6 +127,9 @@ Desktop.ini
 # ------------------------------------------------------------------------------
 # SDK package build output & verifier data
 # ------------------------------------------------------------------------------
-sdk/dist/
+packages/ghostpacket-sdk/dist/
+# Runtime assets copied from the SDK into each app by scripts/sync-app-assets.mjs
+apps/*/public/wasm/
+apps/*/public/worklets/
 *.tgz
 proofs.jsonl

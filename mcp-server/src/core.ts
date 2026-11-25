@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 
-import * as gp from "../../web/src/wasm/ghostpacket_core.js";
-import { PRESETS } from "../../web/src/lib/presets.ts";
+import * as gp from "../../packages/ghostpacket-sdk/wasm/ghostpacket_core.js";
+import { PRESETS } from "../../packages/ghostpacket-sdk/src/presets.ts";
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let ready = false;
 export function core(): typeof gp {
   if (!ready) {
-    const wasm = readFileSync(join(repoRoot, "web", "src", "wasm", "ghostpacket_core_bg.wasm"));
+    const wasm = readFileSync(join(repoRoot, "packages", "ghostpacket-sdk", "wasm", "ghostpacket_core_bg.wasm"));
     gp.initSync({ module: wasm });
     ready = true;
   }

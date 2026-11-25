@@ -1,0 +1,31 @@
+{
+  "name": "ghostpacket",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "GhostPacket skeleton: one Rust/WASM air-gap core, one SDK and one UI kit powering several offline apps.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "wasm": "wasm-pack build crates/ghostpacket-core --target web --release --out-dir ../../packages/ghostpacket-sdk/wasm --out-name ghostpacket_core && node scripts/copy-wasm.mjs",
+    "dev:portal": "npm run dev -w apps/portal",
+    "build:portal": "npm run build -w apps/portal",
+    "build:sdk": "node scripts/build-sdk.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:sdk": "npm test -w packages/ghostpacket-sdk",
+    "test:sdk:browser": "npm run test:browser -w packages/ghostpacket-sdk",
+    "audit": "node scripts/kiroween-audit.mjs --full"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

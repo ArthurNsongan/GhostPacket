@@ -19,21 +19,29 @@ inclusion: always
 - Hardening: 5 s deadline per request, head ≤ 2 KiB, one numeric `Content-Length` ≤ 512, no `Transfer-Encoding`, `application/octet-stream` only, exact `Origin` match, ≤ 32 connections (≤ 4 per IP), token bucket, one PBKDF2 at a time, merged post-decryption error codes, append-only JSONL ledger with `sync_data`.
 - Tests: `cargo test --release --manifest-path crates/ghostpacket-verifier/Cargo.toml` (real TCP).
 
-## SDK package (`sdk/`)
-- `ghostpacket-sdk`, ES modules, built from `web/src/lib` by `node scripts/build-sdk.mjs` (`tsc -p web/tsconfig.sdk.json` → `sdk/dist`, generated, not committed), with the WASM glue, the `.wasm` and the capture worklet.
-- Entry `web/src/lib/index.ts` resolves assets with `new URL(…, import.meta.url)`; `GhostPacketSDK.load({ wasm, workletUrl, storage, seed })` overrides them.
-- Runtime dependencies: `jsqr`, `qrcode-generator`. Storage falls back to memory when `localStorage` is missing (Node).
-- Tests: `npm --prefix sdk test` (Node) and `npm --prefix sdk run test:browser` (headless Chrome with a fake microphone and camera).
+## Monorepo
+- npm workspaces from the root `package.json` (`packages/*`, `apps/*`), one root `package-lock.json`, Node ≥ 23.6. `mcp-server/` keeps its own lockfile.
+- Root scripts: `npm run wasm`, `npm run build:portal`, `npm run build:sdk`, `npm run typecheck` (every workspace), `npm run test:sdk`, `npm run test:sdk:browser`, `npm run audit`.
 
-## Web (`web/`)
-- Next.js (App Router) as a static export, TypeScript `strict`, Tailwind CSS v4.
+## SDK package (`packages/ghostpacket-sdk`)
+- `ghostpacket-sdk`: the TypeScript source is consumed directly by the apps (`exports`: `ghostpacket-sdk/<module>` → `src/<module>.ts`).
+- `npm run build:sdk` (`scripts/build-sdk.mjs`) emits the publishable ES module build into `dist/` (`dist/package.json`, `lib/`, `wasm/`, `assets/`); pack it with `npm pack ./packages/ghostpacket-sdk/dist`.
+- Entry `src/index.ts` resolves assets with `new URL(…, import.meta.url)`; `GhostPacketSDK.load({ wasm, workletUrl, storage, seed })` overrides them.
+- Runtime dependencies: `jsqr`, `qrcode-generator`. Storage falls back to memory when `localStorage` is missing (Node).
+- Tests: `npm run test:sdk` (Node) and `npm run test:sdk:browser` (headless Chrome with a fake microphone and camera).
+
+## UI package (`packages/ghostpacket-ui`)
+- `ghostpacket-ui`: React 19 client components shipped as TypeScript source (`ghostpacket-ui/<Component>`), Tailwind classes only, theme tokens provided by the app's CSS.
+
+## Apps (`apps/*`)
+- Next.js (App Router) static exports, TypeScript `strict`, Tailwind CSS v4, `transpilePackages: ["ghostpacket-sdk", "ghostpacket-ui"]`, `turbopack.root` = repo root.
 - Web Audio API (`AudioContext`, `AudioWorklet`, `ScriptProcessor` fallback) for the acoustic channel.
 - Canvas 2D for the spectrogram, fountain grid and QR codes.
 - Camera: `getUserMedia` + native `BarcodeDetector`, `jsQR` fallback.
-- Offline: same-origin service worker `web/public/sw.js`; four static routes with `trailingSlash`.
-- Build: `npm run build` = `next build` + `scripts/fix-next-export.mjs` (flattens Next 16 prefetch files for static hosts).
+- Offline: same-origin service worker `public/sw.js` per app; static routes with `trailingSlash`.
+- Build: `next build` + `scripts/fix-next-export.mjs` (flattens Next 16 prefetch files for static hosts); `prebuild` copies the WASM and worklet into `public/`.
 - Fonts self-hosted with `@fontsource`.
-- Type check: `npm --prefix web run typecheck` (`tsc --noEmit`).
+- Type check: `npm run typecheck` at the root (`tsc --noEmit` in every workspace).
 
 ## Kiro tooling
 - Local MCP server `ghostpacket-inspector` (`mcp-server/`, stdio, `@modelcontextprotocol/sdk`), run directly by Node ≥ 23.6 (type stripping).

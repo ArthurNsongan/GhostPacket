@@ -1,0 +1,21 @@
+# Implementation plan — V3 "Skeleton Crew"
+
+- [x] 1. Monorepo skeleton (Phase 1)
+  - [x] 1.1 Root npm workspace; `git mv` of `web/` and `sdk/` into `packages/ghostpacket-sdk`, `packages/ghostpacket-ui`, `apps/portal`
+  - [x] 1.2 `GhostContext` (`GhostProvider`, `useShell`, `WithGhost`) in the UI package; portal `AppShell` built on it
+  - [x] 1.3 Scripts: `copy-wasm`, `sync-app-assets` (new), `build-sdk` (publishable `dist/package.json`), `deploy-gh-pages`, `fix-next-export`; workflow on the root lockfile
+  - [x] 1.4 MCP server, type-check hook, steering (`structure`, `tech`, `ui-design-system`), `dsp-security-auditor` and README on the new paths
+  - [x] 1.5 Audit check "Skeleton Crew"; secret scan and type check over every workspace
+  - [x] 1.6 Verified: 3 workspaces typecheck, portal 30/30 site checks, SDK 8/8 Node and 11/11 browser, MCP smoke test, audit 12/12
+  - _Requirements: 1.*_
+- [ ] 2. Haunted / Clean Field redesign (Phase 4)
+  - [ ] 2.1 `haunted.css` tokens, `data-theme` / `data-app`, Cinzel Decorative self-hosted, theme switch
+  - [ ] 2.2 `LanternGuardian`, `BatSwarmLayer`, `BloodMoonAtmosphere`, cobweb panels
+  - [ ] 2.3 `haunted-sfx.ts` (Web Audio synthesis, auto-mute while the modem or microphone runs)
+  - _Requirements: 3.*_
+- [ ] 3. Two distinct apps (Phase 5)
+  - [ ] 3.1 `apps/ghost-clinic`: patients, prescriptions, pharmacy hand-over
+  - [ ] 3.2 `apps/ghost-tontine`: members, rounds, receipts, vouchers
+  - [ ] 3.3 Multi-app GitHub Pages deploy (`/clinic/`, `/tontine/`), per-app service worker scope
+  - _Requirements: 2.*_
+- [ ] 4. High-speed transports and GPKT v2 (Phases 2–3, separate spec `high-speed-transports`)

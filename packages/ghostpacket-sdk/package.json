@@ -1,0 +1,32 @@
+{
+  "name": "ghostpacket-sdk",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Signed offline documents over sound (4-FSK) and light (fountain QR): seal, transmit, receive, verify and sync proofs. Rust/WASM core.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wasm/*": "./wasm/*",
+    "./assets/*": "./assets/*",
+    "./*": "./src/*.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-sdk.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test test/sdk.test.mjs",
+    "test:browser": "node test/browser.test.mjs"
+  },
+  "dependencies": {
+    "jsqr": "1.4.0",
+    "qrcode-generator": "2.0.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ArthurNsongan/GhostPacket.git",
+    "directory": "packages/ghostpacket-sdk"
+  }
+}

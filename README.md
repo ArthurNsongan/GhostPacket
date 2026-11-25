@@ -22,7 +22,7 @@ V2 features (`.kiro/specs/platform-v2/`):
 - **Anti-replay Crypt Ledger**: a receipt or voucher presented twice raises `REPLAY DETECTED · ALREADY REDEEMED`, even offline.
 - **Trusted keyring**: the sender shows an identity QR; in strict mode any other signer is rejected with `UNTRUSTED_ISSUER`.
 - **Offline**: a same-origin service worker; after one visit the site works in airplane mode (`OFFLINE · AIR-GAP ACTIVE`).
-- **SDK package** `ghostpacket-sdk` (`sdk/`): sealing, both transmitters, both receivers and verification for another app, with no bundler required ([below](#sdk-package)).
+- **SDK package** `ghostpacket-sdk` (`packages/ghostpacket-sdk/`): sealing, both transmitters, both receivers and verification for another app, with no bundler required ([below](#sdk-package)).
 - **Offline-to-cloud sync**: proofs verified offline wait in an outbox and are uploaded later to `ghostpacket-verifier`, a Rust server that re-verifies them and catches a voucher redeemed on two offline devices (`.kiro/specs/sdk-and-sync/`, [below](#server-verifier-and-offline-to-cloud-sync)).
 
 Target users: tontine treasurers, rural clinics and aid distributors in low-coverage areas. The three built-in presets are a **Dakar Tontine Receipt** (Tilène Market), a **Ndiob Rural Clinic Prescription** and a **Kaolack Flood Relief Voucher**.
@@ -78,18 +78,21 @@ The full specification, with the verification order and every error code, is in 
 
 ## Repository layout
 
+V3 is a "Skeleton Crew" monorepo: one skeleton (the Rust core, the SDK and the UI kit) and apps built only from it.
+
 ```text
-crates/ghostpacket-core/   Rust → WASM: protocol, crypto, Reed-Solomon, FSK, fountain, channel simulator
+crates/ghostpacket-core/     Rust → WASM: protocol, crypto, Reed-Solomon, FSK, fountain, channel simulator
 crates/ghostpacket-verifier/ native server verifier + anti-replay ledger (reuses ghostpacket-core)
-web/                       Next.js static export (UI, Web Audio, Canvas, camera)
-sdk/                       ghostpacket-sdk npm package, its tests and a plain-HTML example
-mcp-server/                MCP server ghostpacket-inspector (stdio)
-scripts/                   Node scripts called by the Kiro hooks, SDK build, gh-pages deploy
-.kiro/                     steering, specs, hooks, MCP settings
-.github/workflows/         GitHub Pages deployment
+packages/ghostpacket-sdk/    TypeScript SDK: WASM bridge, transports, keyring, ledger, outbox (+ tests, example)
+packages/ghostpacket-ui/     shared React components: spectrogram, fountain grid, conduit, inspector, seal, …
+apps/portal/                 the GitHub Pages site (Home, How It Works, Simulation, Test)
+mcp-server/                  MCP server ghostpacket-inspector (stdio)
+scripts/                     Node scripts called by the Kiro hooks, SDK build, asset sync, gh-pages deploy
+.kiro/                       steering, specs, hooks, agents, MCP settings
+.github/workflows/           GitHub Pages deployment
 ```
 
-All cryptography, compression, DSP and coding runs in the Rust crate. `web/` only does hardware I/O and rendering, through `web/src/lib/wasm-bridge.ts`.
+All cryptography, compression, DSP and coding runs in the Rust crate. TypeScript only does hardware I/O and rendering, through `packages/ghostpacket-sdk/src/wasm-bridge.ts`. Apps import `ghostpacket-sdk/<module>` and `ghostpacket-ui/<Component>`; the audit checks that no app bypasses them.
 
 ## Build
 
@@ -98,24 +101,24 @@ Requirements: Rust with `wasm32-unknown-unknown`, `wasm-pack`, and Node ≥ 23.6
 ```powershell
 cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml       # 52 tests: vectors + fuzz
 cargo test --release --manifest-path crates/ghostpacket-verifier/Cargo.toml   # 12 tests, real TCP
-npm --prefix web install
-npm --prefix web run wasm        # wasm-pack → web/src/wasm + web/public/wasm
-npm --prefix web run build       # static export in web/out
-npx serve web/out                # or any static host
+npm install                      # every workspace, one lockfile
+npm run wasm                     # wasm-pack → packages/ghostpacket-sdk/wasm, copied into each app's public/
+npm run build:portal             # static export in apps/portal/out
+npm run typecheck                # tsc --noEmit in every workspace
+npx serve apps/portal/out        # or any static host
 ```
 
-The generated WASM glue is committed, so `npm run build` works without a Rust toolchain.
+The generated WASM glue is committed, so `npm run build:portal` works without a Rust toolchain.
 
 ## SDK package
 
-`sdk/` is the `ghostpacket-sdk` package: ES modules with type declarations, the `.wasm` and the capture worklet. It is built from `web/src/lib`, so the site and the package run the same code.
+`packages/ghostpacket-sdk` is the `ghostpacket-sdk` package. The apps compile its TypeScript source directly; `npm run build:sdk` produces the standalone ES module build (type declarations, the `.wasm` and the capture worklet) in `packages/ghostpacket-sdk/dist`.
 
 ```powershell
-node scripts/build-sdk.mjs          # → sdk/dist (also run by npm pack)
-npm --prefix sdk install
-npm --prefix sdk test               # Node: seal, verify, E2EE, ledger, keyring, sync
-npm --prefix sdk run test:browser   # headless Chrome: sound and light, both directions, fake mic + camera
-npm pack ./sdk                      # ghostpacket-sdk-0.2.0.tgz, then in your app: npm install ../ghostpacket-sdk-0.2.0.tgz
+npm run build:sdk                # → packages/ghostpacket-sdk/dist
+npm run test:sdk                 # Node: seal, verify, E2EE, ledger, keyring, sync
+npm run test:sdk:browser         # headless Chrome: sound and light, both directions, fake mic + camera
+npm pack ./packages/ghostpacket-sdk/dist   # ghostpacket-sdk-0.3.0.tgz, then in your app: npm install ../ghostpacket-sdk-0.3.0.tgz
 ```
 
 ```js
@@ -129,7 +132,7 @@ if (sealed.ok) await gp.transmitAcoustic(sealed.value.frame);   // or transmitOp
 const v = gp.verifyFrame(frame, { passphrase: "baobab moon", strictKeyring: true });
 ```
 
-In a page without a bundler, map `ghostpacket-sdk`, `jsqr` and `qrcode-generator` with an import map: see `sdk/examples/browser/index.html`. In Node, storage falls back to memory and the acoustic and optical I/O methods are not available; sealing, verification and sync work.
+In a page without a bundler, map `ghostpacket-sdk`, `jsqr` and `qrcode-generator` with an import map: see `packages/ghostpacket-sdk/examples/browser/index.html`. In Node, storage falls back to memory and the acoustic and optical I/O methods are not available; sealing, verification and sync work.
 
 ## Server verifier and offline-to-cloud sync
 
@@ -185,7 +188,7 @@ If the sound path fails, lower the speaker volume (clipping), move closer, or cu
 ## How we built GhostPacket with Kiro
 
 - **Specs** (`.kiro/specs/`): seven specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`, `sdk-and-sync`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
-- **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `web/src/**` and carries the "Spectral Telemetry" visual system.
+- **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `apps/*/src/**` and `packages/ghostpacket-ui/src/**` and carries the "Spectral Telemetry" visual system.
 - **Hooks** (`.kiro/hooks/`, v1 format):
   - `fuzz-noise-channel` runs the acoustic and optical fuzz suites whenever a codec file is saved.
   - `wasm-no-panic-guard` rejects `unwrap`, `expect` and `panic!` in `src/`.

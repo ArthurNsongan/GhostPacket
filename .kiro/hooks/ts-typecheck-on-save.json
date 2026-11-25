@@ -3,14 +3,14 @@
   "hooks": [
     {
       "name": "ts-typecheck-on-save",
-      "description": "Strict TypeScript type check (tsc --noEmit) on every change under web/src.",
       "trigger": "PostFileSave",
-      "matcher": "web[\\\\/]src[\\\\/].*\\.(ts|tsx)$",
+      "description": "Strict TypeScript type check (tsc --noEmit) of every workspace on each change under packages/*/src or apps/*/src.",
+      "matcher": "(packages|apps)[\\\\/][^\\\\/]+[\\\\/]src[\\\\/].*\\.(ts|tsx)$",
       "action": {
         "type": "command",
-        "command": "npm --prefix web run typecheck"
-      },
-      "timeout": 120
+        "command": "npm run typecheck",
+        "timeout": 180
+      }
     }
   ]
 }

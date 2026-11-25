@@ -36,14 +36,14 @@ const basePath = userPage ? "" : `/${repo}`;
 const sha = git(["rev-parse", "--short", "HEAD"], root).stdout.trim();
 const dirty = git(["status", "--porcelain"], root).stdout.trim() !== "";
 
-console.log(`Building web/out with base path "${basePath}" from ${sha}${dirty ? " (uncommitted changes!)" : ""}…`);
-run("npm", ["--prefix", "web", "run", "build"], {
+console.log(`Building apps/portal/out with base path "${basePath}" from ${sha}${dirty ? " (uncommitted changes!)" : ""}…`);
+run("npm", ["run", "build:portal"], {
   cwd: root,
   env: { ...process.env, NEXT_PUBLIC_BASE_PATH: basePath, NEXT_TELEMETRY_DISABLED: "1" },
 });
-const out = join(root, "web", "out");
+const out = join(root, "apps", "portal", "out");
 if (!existsSync(join(out, "index.html"))) {
-  console.error("web/out/index.html missing after build.");
+  console.error("apps/portal/out/index.html missing after build.");
   process.exit(1);
 }
 

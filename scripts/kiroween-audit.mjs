@@ -38,6 +38,11 @@ function walk(dir, filter) {
   return out;
 }
 
+function appDirs() {
+  const apps = join(root, "apps");
+  return existsSync(apps) ? readdirSync(apps).map((n) => join(apps, n)).filter((p) => existsSync(join(p, "package.json"))) : [];
+}
+
 check(".kiro/ is tracked by git (not ignored)", () => {
   const probe = ".kiro/steering/product.md";
   const r = spawnSync("git", ["check-ignore", "-q", probe], { cwd: root });
@@ -58,7 +63,7 @@ check(".kiro/ contains steering, specs, hooks and MCP settings", () => {
     ".kiro/hooks/kiroween-audit.json",
   ];
   required.push(".kiro/steering/ui-design-system.md", ".kiro/agents/dsp-security-auditor.md");
-  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2", "sdk-and-sync"]) {
+  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2", "sdk-and-sync", "v3-skeleton-crew"]) {
     for (const f of ["requirements.md", "design.md", "tasks.md"]) required.push(`.kiro/specs/${spec}/${f}`);
   }
   const missing = required.filter((f) => !existsSync(join(root, f)));
@@ -96,8 +101,11 @@ check("No secret or API key in client code", () => {
     /\b(api[_-]?key|secret|token)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}["']/i,
     /NEXT_PUBLIC_[A-Z_]*(KEY|SECRET|TOKEN)/,
   ];
+  const client = (n) => /\.(ts|tsx|js|mjs|json|css)$/.test(n) && !n.endsWith("_bg.wasm");
   const files = [
-    ...walk(join(root, "web", "src"), (n) => /\.(ts|tsx|js|mjs|json|css)$/.test(n) && !n.endsWith("_bg.wasm")),
+    ...walk(join(root, "packages", "ghostpacket-sdk", "src"), client),
+    ...walk(join(root, "packages", "ghostpacket-ui", "src"), client),
+    ...appDirs().flatMap((a) => walk(join(a, "src"), client)),
     ...walk(join(root, "mcp-server", "src"), (n) => /\.(ts|js)$/.test(n)),
   ];
   const hits = [];
@@ -120,9 +128,32 @@ check("Zero panic in crates/ghostpacket-core/src", () => {
   return "0 forbidden call";
 });
 
+check("Skeleton Crew: every app is built on the shared packages", () => {
+  const apps = appDirs();
+  if (!existsSync(join(root, "packages", "ghostpacket-sdk", "package.json")) || !existsSync(join(root, "packages", "ghostpacket-ui", "package.json"))) {
+    throw new Error("packages/ghostpacket-sdk or packages/ghostpacket-ui missing");
+  }
+  if (apps.length === 0) throw new Error("no app under apps/");
+  const problems = [];
+  for (const app of apps) {
+    const name = relative(root, app).replaceAll("\\", "/");
+    const deps = JSON.parse(readFileSync(join(app, "package.json"), "utf8")).dependencies ?? {};
+    for (const p of ["ghostpacket-sdk", "ghostpacket-ui"]) if (!deps[p]) problems.push(`${name} does not depend on ${p}`);
+    for (const f of walk(join(app, "src"), (n) => /\.(ts|tsx)$/.test(n))) {
+      const text = readFileSync(f, "utf8");
+      const rel = relative(root, f).replaceAll("\\", "/");
+      // Crypto and DSP only through the SDK; no reaching into another app or into package internals by path.
+      if (/from\s+["'][^"']*ghostpacket_core(\.js)?["']/.test(text)) problems.push(`${rel} imports the WASM glue directly`);
+      if (/from\s+["'](\.\.\/)+(apps|packages)\//.test(text)) problems.push(`${rel} imports a workspace by relative path`);
+    }
+  }
+  if (problems.length) throw new Error(problems.join("; "));
+  return `${apps.length} app(s): ${apps.map((a) => relative(join(root, "apps"), a)).join(", ")}`;
+});
+
 check("WASM bundle size < 350 KB gzip", () => {
-  const wasm = join(root, "web", "public", "wasm", "ghostpacket_core_bg.wasm");
-  if (!existsSync(wasm)) throw new Error("web/public/wasm/ghostpacket_core_bg.wasm not built (npm --prefix web run wasm)");
+  const wasm = join(root, "packages", "ghostpacket-sdk", "wasm", "ghostpacket_core_bg.wasm");
+  if (!existsSync(wasm)) throw new Error("packages/ghostpacket-sdk/wasm/ghostpacket_core_bg.wasm not built (npm run wasm)");
   const raw = readFileSync(wasm);
   const gz = gzipSync(raw).length;
   if (gz > 350 * 1024) throw new Error(`${(gz / 1024).toFixed(1)} KB gzip`);
@@ -151,18 +182,19 @@ if (args.has("--full")) {
     return `${passed} tests passed`;
   });
   check("SDK package tests (Node)", () => {
-    if (!existsSync(join(root, "sdk", "dist", "lib", "index.js"))) return "skipped: run node scripts/build-sdk.mjs first";
-    if (!existsSync(join(root, "sdk", "node_modules"))) return "skipped: npm --prefix sdk install";
-    const r = spawnSync("npm", ["--prefix", "sdk", "test"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
+    if (!existsSync(join(root, "packages", "ghostpacket-sdk", "dist", "lib", "index.js"))) return "skipped: run npm run build:sdk first";
+    if (!existsSync(join(root, "node_modules"))) return "skipped: npm install at the repo root";
+    const r = spawnSync("npm", ["run", "test:sdk"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
     const pass = /# pass (\d+)|pass (\d+)/.exec(r.stdout ?? "");
     if (r.status !== 0) throw new Error((r.stdout ?? "").slice(-1500));
     return `${pass ? pass[1] ?? pass[2] : "all"} tests passed`;
   });
-  check("TypeScript typecheck (web)", () => {
-    if (!existsSync(join(root, "web", "node_modules"))) throw new Error("web/node_modules missing (npm --prefix web install)");
-    const r = spawnSync("npm", ["--prefix", "web", "run", "typecheck"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
+  check("TypeScript typecheck (every workspace)", () => {
+    if (!existsSync(join(root, "node_modules"))) throw new Error("node_modules missing (npm install at the repo root)");
+    const r = spawnSync("npm", ["run", "typecheck"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
     if (r.status !== 0) throw new Error((r.stdout ?? "").slice(-1500));
-    return "tsc --noEmit OK";
+    const n = [...(r.stdout ?? "").matchAll(/tsc --noEmit/g)].length;
+    return `tsc --noEmit OK in ${n} workspace(s)`;
   });
 }
 
