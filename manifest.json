@@ -1,0 +1,13 @@
+{
+  "name": "GhostPacket — Spectral Signal Lab",
+  "short_name": "GhostPacket",
+  "description": "Signed documents sent offline over sound and light.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080B",
+  "theme_color": "#07080B",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
