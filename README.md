@@ -76,7 +76,13 @@ The generated WASM glue is committed, so `npm run build` works without a Rust to
 
 ## Deploy
 
-**GitHub Pages** (included): push to `main`, then in the repository go to *Settings → Pages → Source* and choose *GitHub Actions*. The workflow `.github/workflows/pages.yml` builds the static export with the right base path (`/<repo>`) and publishes it over HTTPS. No secret or environment variable is needed. The build was checked locally under `/GhostPacket/`: demo, WASM, AudioWorklet and fonts load with no 404.
+Live demo: **https://arthurnsongan.github.io/GhostPacket/**
+
+**GitHub Pages, branch mode** (default): run `node scripts/deploy-gh-pages.mjs`. It builds the static export with the base path `/<repo>`, adds `.nojekyll` (otherwise Jekyll drops `_next/`) and pushes the result to the `gh-pages` branch. One-time setup: *Settings → Pages → Source: Deploy from a branch → `gh-pages` / root*. It needs no GitHub Actions minutes and no secret.
+
+**GitHub Pages, Actions mode** (optional): `.github/workflows/pages.yml` does the same build in CI. It is manual-only; switch *Source* to *GitHub Actions* and run it from the Actions tab.
+
+The base-path build was checked locally under `/GhostPacket/`: demo, WASM, AudioWorklet and fonts load with no 404.
 
 **Vercel / Netlify / Cloudflare Pages**: set the root directory to `web`, build command `npm run build`, output directory `out`.
 

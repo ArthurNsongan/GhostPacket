@@ -1,11 +1,12 @@
-# Static deployment to GitHub Pages (HTTPS, required for microphone and camera on phones).
+# Alternative static deployment to GitHub Pages through Actions (HTTPS).
 # The WASM glue and binary are committed, so no Rust toolchain is needed here.
-# One-time setup: repository Settings → Pages → Source: "GitHub Actions".
+# Manual trigger only: the default deployment is `node scripts/deploy-gh-pages.mjs`
+# (gh-pages branch), which needs no Actions minutes.
+# To use this workflow instead: Settings → Pages → Source: "GitHub Actions", then run it
+# from the Actions tab (and add `push: { branches: [main] }` below for automatic deploys).
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
