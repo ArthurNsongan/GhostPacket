@@ -1,137 +1,90 @@
-# GhostPacket — UI/UX Design Guidelines ("Spectral Telemetry")
+# GhostPacket — UI/UX Design Guidelines ("Midnight Atelier", V4)
 
-> **Kiroween 2026 art direction**: **Neo-Gothic Signal Lab** — a precision lab instrument (*Teenage Engineering / Linear*) meets dark editorial elegance (*A24 sci-fi*) and a refined, mysterious, living Halloween atmosphere.
+> **Art direction**: an October campaign for a luxury house meets a precision lab instrument. Editorial typography, a single warm accent, deep aubergine night, a pale moon and candlelight.
 >
-> **Golden rule**: **zero cheap clichés** (no clipart pumpkins, no aggressive neon orange, no unreadable gothic fonts). Halloween comes through **spectral light, editorial typography, cryptographic seals, micro-copy and fluid 60 FPS physical animation**.
+> **Golden rule**: **classy first, spooky second.** Halloween comes through **light, typography, micro-copy and event-driven motion** — never through clichés (no cobwebs, no gothic blackletter, no clipart pumpkins, no neon).
+
+Source of truth in code: `packages/ghostpacket-ui/styles/ghostpacket.css` (tokens, fonts, shared classes) and `packages/ghostpacket-ui/styles/haunted.css` (themes and per-app accents). Canvas drawings read the same tokens through `packages/ghostpacket-ui/src/palette.ts`.
 
 ---
 
-## 1. Colour palette — *Obsidian, Ectoplasm & Candlelight*
+## 1. Colour — *Aubergine night, candlelight, mist and garnet*
 
-Layered dark system with strong contrast (**WCAG AA+**), 3 surface depth levels and functional light accents:
+OKLCH tokens, 3 surface levels, WCAG AA text contrast.
 
-| CSS token | Hex / RGBA | Exact role |
+| Tailwind token | Haunted value | Role |
 |---|---|---|
-| `--bg-abyss` | `#07080B` | Main background (midnight obsidian, never flat `#000000`) |
-| `--bg-crypt` | `#0D0F14` | Main panels (Emitter, Channel, Receiver) |
-| `--bg-velvet` | `#141720` | Raised cards, input fields, inactive grid blocks |
-| `--bg-glass` | `rgba(13, 15, 20, 0.72)` | Floating bars with `backdrop-filter: blur(14px)` |
-| `--border-hairline` | `rgba(243, 239, 230, 0.08)` | Ultra-thin 1px borders |
-| `--border-highlight` | `rgba(243, 239, 230, 0.14)` | Top specular highlight (`inset 0 1px 0`) |
-| `--ink-bone` | `#F3EFE6` | Primary text (**bone ivory** — warmer and richer than `#FFFFFF`) |
-| `--ink-mist` | `#9BA3B4` | Secondary text & descriptions |
-| `--ink-ash` | `#5C6475` | Technical labels, units, metadata |
-| `--accent-ectoplasm` | `#5EF2C6` | **Primary signal**: FFT spectrogram, FSK lock, resolved LT blocks, `ED25519 VERIFIED` badge |
-| `--accent-ectoplasm-dim` | `rgba(94, 242, 198, 0.14)` | Soft halo & background of verified badges |
-| `--accent-ember` | `#F59E0B` → `#E87A3E` | **Candlelight / molten amber**: main CTA (*1-click demo*), carrier energy, a classy Halloween touch |
-| `--accent-amethyst` | `#A78BFA` | **Spectral mist**: optical Fountain QR channel, subtle ambient halos |
-| `--accent-crimson` | `#F43F5E` | **Broken seal / alert**: lost frames (30 %), `CRC32_MISMATCH`, `INVALID_SIGNATURE`, *Curse 1 bit* button |
+| `void` | `oklch(0.14 0.02 300)` | Page background (aubergine black, never `#000`) |
+| `panel` | `oklch(0.17 0.02 300)` | Panels |
+| `panel-2` | `oklch(0.21 0.022 300)` | Raised surfaces, selects |
+| `ink` | `oklch(0.94 0.015 80)` | Primary text (bone ivory) |
+| `mist` | `oklch(0.74 0.02 300)` | Secondary text |
+| `mute` | `oklch(0.58 0.02 300)` | Labels, metadata |
+| `accent` | portal `oklch(0.78 0.14 65)` · clinic `oklch(0.76 0.11 45)` · tontine `oklch(0.83 0.12 85)` | **The single brand accent**: primary CTA, italic accent words, active tab, app links |
+| `phosphor` | `oklch(0.85 0.12 170)` | **Signal only**: acoustic channel, `SYNC LOCK`, resolved blocks, `ED25519 VERIFIED` |
+| `ion` | `oklch(0.8 0.03 290)` | Moon silver: optical QR channel, key fingerprints |
+| `alarm` | `oklch(0.62 0.2 15)` | Garnet: lost frames, `CRC32_MISMATCH`, `INVALID_SIGNATURE`, replay, *Curse 1 bit* |
 
-### Proportion rule (70 / 20 / 10)
-- **70 %**: obsidian & slate surfaces (`--bg-abyss`, `--bg-crypt`) with a subtle grain texture (2 % opacity).
-- **20 %**: ivory & mist typography (`--ink-bone`, `--ink-mist`) + 1px borders.
-- **10 %**: functional spectral lights (`--accent-ectoplasm`, `--accent-ember`, `--accent-crimson`) — **every glow carries a real technical meaning** (never gratuitous neon).
+### Proportion rule (80 / 15 / 5)
+- **80 %** aubergine surfaces with 3.5 % film grain.
+- **15 %** ivory and grey typography.
+- **5 %** colour: one warm accent per screen, plus green/garnet only when they carry a verdict.
+
+Clean Field Mode keeps the same roles on a neutral graphite base with higher contrast and no decoration.
 
 ---
 
-## 2. Typography — *Editorial Gothic × Instrument Precision*
+## 2. Typography — *Editorial serif × modern grotesk*
 
-High-end typographic trio (self-hosted with `@fontsource`, no network call):
+Self-hosted variable fonts (`@fontsource-variable`, no network call):
 
-| Role | Font | Use & character |
+| Role | Font | Use |
 |---|---|---|
-| **Display / hero titles** | **`Instrument Serif`** (Regular + *Italic*) | *GhostPacket* logo, major section titles, status quotes (*"Cryptographic seal intact"*). Brings editorial class and neo-gothic subtlety. |
-| **UI / interface** | **`Plus Jakarta Sans`** (or **`Space Grotesk`**) | Buttons, tabs, forms, document cards (tontine, prescription). Readable, geometric and contemporary. |
-| **Telemetry / protocol** | **`JetBrains Mono`** (`font-variant-numeric: tabular-nums`) | Hex inspector, `1600 Hz` frequencies, `12.0 dB` SNR, `8.4 ms` latency, Ed25519 fingerprints. No width jumps during animations. |
+| Display / wordmarks | **Fraunces** (opsz, SOFT, WONK axes) | `.display`: weight ~340, `SOFT 50`, `letter-spacing -0.028em`. The accent word in `<em>` uses the italic with `SOFT 100, WONK 1` — the discreet "witchy" touch. `.display-gothic` (wordmarks): opsz 144, SOFT 100, WONK 1. |
+| Interface | **Geist** | Buttons, tabs, forms, body copy, `.panel-title` (550, 10.5 px, uppercase, 0.16em). |
+| Telemetry | **Geist Mono** (`tabular-nums`, slashed zero) | Only real values: Hz, dB, ms, bytes, hex, fingerprints, IDs. |
 
-### Scale & rhythm
-- Main title: `Instrument Serif`, `clamp(2rem, 3.5vw, 3rem)`, `letter-spacing: -0.02em`, with one keyword in amber/ectoplasm *italics*.
-- Instrument micro-labels: `JetBrains Mono`, `11px`, `uppercase`, `letter-spacing: 0.12em`, colour `--ink-ash`.
-- KPI figures (compression, latency, blocks): `JetBrains Mono`, `20px–28px`, `tabular-nums`.
+Scale: hero `clamp(2.8rem, 6vw, 5.4rem)` at line-height 0.98; section titles `clamp(2rem, 3.4vw, 2.8rem)`; KPI figures Geist Mono 1.4–1.7 rem.
 
 ---
 
-## 3. Animations & micro-interactions (60 FPS, tactile & atmospheric)
+## 3. Components & states
 
-**Animation stack**: CSS keyframes on `transform`/`opacity` for UI transitions + **HTML5 Canvas 2D (`requestAnimationFrame`)** for real-time DSP (no React lag).
-
-### 3.1 Living atmosphere (background)
-- **Slow spectral mist**: two very diffuse radial orbs (`opacity: 0.09`, `--accent-ectoplasm` on the left, `--accent-amethyst` on the right, an `--accent-ember` hint in the centre) drifting on a slow `18s` cycle in pure CSS (`transform: translate3d`).
-- **Subtle film grain**: SVG `feTurbulence` overlay at `opacity: 0.025` (`pointer-events: none`) for a premium smoked-glass / anodized-metal look.
-- **Border spotlight**: when hovering instrument cards, a soft glow follows the cursor on the `1px` border (Linear / Raycast effect).
-
-### 3.2 GhostPacket signature animations
-1. **Central signal conduit (Emitter → Receiver)**:
-   - An animated SVG bridge visually links the two panels.
-   - **Channel A (acoustic)**: a live sine wave whose frequency follows the active FSK carrier (`1600`–`2800 Hz`) and fills with crackle when the user raises the white-noise (SNR) slider.
-   - **Channel B (optical)**: a stream of glowing violet/ectoplasm droplets travelling right; when a frame falls into the **30 % simulated loss**, the droplet turns crimson and **dissolves into sparks** mid-flight with a `DROP` micro-badge.
-2. **Phosphor-afterglow FFT spectrogram**:
-   - Canvas rendering with a high-end CRT oscilloscope phosphor trail (gradient `#07080B` → `#0D4A3E` → `#5EF2C6` → `#F3EFE6` peak).
-   - Fine annotated sight lines on the 4 carriers `f0..f3` + a pulsing **`SYNC LOCK`** indicator that locks with a sharp flash when the Barker preamble is detected.
-3. **LT fountain grid — "belief propagation" cascade**:
-   - The `K` blocks appear as numbered dark glass tiles (`B0`..`B15`).
-   - Direct resolution (degree 1): quick spring 3D flip (`rotateX`) + ectoplasm halo.
-   - **Cascade effect (peeling)**: when a block unlocks several pending droplets, a light wave runs across the unlocked tiles like dominoes (`stagger: 35ms`) with a `CASCADE ×3` counter.
-4. **Ed25519 cryptographic seal (the "wow" moment)**:
-   - **Success (`ED25519 VERIFIED`)**: a minimal geometric seal stamps in with a snappy spring (`stiffness: 420, damping: 24`), followed by a concentric ectoplasm ripple.
-   - **1-bit curse (`CURSED / TAMPERED`)**: horizontal micro-shake (`±4px`, `180ms`), brief RGB chromatic split (controlled glitch), the corrupted byte lights up crimson in the hex inspector and the seal cracks with the exact error (`CRC32_MISMATCH` or `INVALID_SIGNATURE`).
-5. **Main "1-click demo" CTA**:
-   - Elegant pill button with an amber/obsidian gradient, a subtle slowly rotating shiny border (slow conic-gradient) and an integrated progress bar showing the live steps (`1. Sign & LZ4` → `2. FSK Audio` → `3. Fountain QR` → `4. Ed25519 Verified`).
-
-### 3.3 Accessibility & performance
-- Native `@media (prefers-reduced-motion: reduce)` support: turns off ambient drift, shakes and particles, while keeping clear states and telemetry.
-- All CSS animations use only `transform` and `opacity` (GPU-composited, no reflow).
+- **Selection without outlines**: the active nav item, tab or option gets a tonal background and `font-medium`. No `ring-*`, no accent borders, no focus ring.
+- **Buttons**: `.cta-ember` (candle-wax amber pill, a sheen sweeps across on hover; one per view), `.btn-tonal` (secondary), `.btn-accent` (row actions), `bg-{tone}/10` for channel actions.
+- **Inputs**: tonal fill `bg-ink/[0.045]`, focus brightens the fill.
+- **Keyboard focus**: underline + slight brightening (`:focus-visible`, global).
+- **Panels**: tonal gradient, 1 px neutral hairline, inner top highlight; on hover a warm **candle glow inside the panel** follows the pointer.
+- **Alerts**: tinted background only (`bg-alarm/10`, `bg-amber/10`, `bg-phosphor-dim`).
 
 ---
 
-## 4. Layout & ergonomics (Dual-Canvas + field mode)
+## 4. Motion (60 FPS, event-driven)
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ [Sigil] GhostPacket  |  Mode: [Virtual Lab | Real Air-Gap]  |  WASM: 6.2 ms  │
-│         [ ✨ Summon the full demo (1 click · < 20s) ]        [⚡ Curse 1 bit] │
-├──────────────────────────┬───────────────────────┬───────────────────────────┤
-│  EMITTER                 │   HAUNT THE CHANNEL   │   RECEIVER                │
-│                          │                       │                           │
-│  Presets:                │  ── Animated conduit ►│  FFT spectrogram 60 FPS   │
-│  [Tontine][Rx][Voucher]  │                       │  [SYNC LOCK · 14.2 dB]    │
-│                          │  Audio noise (SNR):   │                           │
-│  LZ4 compression:        │  ====●====== 12 dB    │  Fountain grid (16/16)    │
-│  612 B → 218 B (-64%)    │                       │  [■][■][■][■][■][■][■][■] │
-│                          │  Optical QR loss:     │  [■][■][■][■][■][■][■][■] │
-│  [ Animated fountain QR ]│  ======●==== 30 %     │  Drops: 9 | Cascades: 4   │
-│  10 FPS · Seed #A4F2     │                       │                           │
-│                          │  [Integrity test]     │  ┌─────────────────────┐  │
-│  [▶ Send FSK audio]      │  Flip bit #42         │  │ ✦ ED25519 VERIFIED  │  │
-│                          │                       │  │ Document rebuilt    │  │
-│                          │                       │  └─────────────────────┘  │
-├──────────────────────────┴───────────────────────┴───────────────────────────┤
-│  FRAME INSPECTOR (interactive hex)                                           │
-│  [47 50 4B 54 Sync] [01 Ver] [07 Flags] [00 8E Len] [LZ4...] [CRC32] [Ed25519]│
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Thematic micro-copy (subtle, classy, memorable)
-- Title / subtitle: **GhostPacket** — *Air-gap cryptographic séance · signed documents over sound and light*
-- 1-click button: **`Summon the full demo`**
-- Channel controls: **`Haunt the channel`** (white audio noise / 30 % optical loss)
-- Integrity button (US-03): **`Curse 1 bit`** (immediately shows `CRC32_MISMATCH` / `INVALID_SIGNATURE` detection)
-- PC ↔ phone mode: **`Field mode PC ↔ phone`**
-- Verification badge: **`Cryptographic seal intact`** / **`Corrupted spirit rejected`**
+- **At rest**: slow drift of a candle glow from below and a moon veil from above (26 s), film grain, a pale gibbous moon.
+- **Transmit**: a small bat swarm crosses the screen (`BatSwarmLayer`; no resident bats).
+- **Lost frame**: one bat turns into amber sparks; in the Ether Conduit the orb dissolves into garnet embers.
+- **Rejection / replay**: Blood Moon — the moon turns garnet and the mist reddens for 1.6 s; the seal cracks with a short shake and chromatic split.
+- **Verified**: the seal stamps in with a spring and a mist-green ripple.
+- **Scroll**: `.rise` entrances (fade, 18 px, blur → sharp) via `animation-timeline: view()` where supported.
+- **Emblems**: fine-line lantern / plague-doctor mask / wax seal; only their light reacts to the audio level and the verdict.
+- `prefers-reduced-motion: reduce` turns off drift, entrances, shakes, stamps, pulses and bats.
 
 ---
 
-## 5. Kiro integration (automatic steering)
+## 5. Layout
 
-This guide is loaded through the steering file **`.kiro/steering/ui-design-system.md`**:
-```yaml
----
-inclusion: fileMatch
-fileMatchPattern: ["web/src/**/*.ts", "web/src/**/*.tsx", "web/src/**/*.css"]
----
-```
-So every component generated or edited under `web/src/` automatically inherits this art direction, the exact tokens, the typography and the 60 FPS animation rules.
+- Editorial hero, open on the background (not boxed), with an example sealed document beside it.
+- Bento grids for figures and app entry points.
+- Generous spacing: `gap-5` between panels, `p-5`–`p-7` inside.
 
-### Implementation status
-Implemented: palette tokens, self-hosted typography, spectral mist and grain, ember CTA with rotating highlight, phosphor spectrogram with carrier markers and `SYNC LOCK`, fountain grid with flash on newly resolved blocks, stamped/cracked seal, shake + chromatic split on rejection, crimson flipped byte in the inspector, `prefers-reduced-motion`.  
-Not implemented (deliberately, to keep the demo lean): the animated SVG conduit with dissolving droplets, the cursor-following border spotlight and per-tile domino stagger.
+### Thematic micro-copy (restrained)
+- **GhostPacket** — *signed documents over sound and light*
+- `Summon the full demo` · `Haunt the channel` · `Curse 1 bit`
+- `Cryptographic seal intact` / `Corrupted spirit rejected`
+
+---
+
+## 6. Kiro integration
+
+Loaded through `.kiro/steering/ui-design-system.md` (`fileMatch` on app sources and `packages/ghostpacket-ui`), so every generated component inherits these rules.

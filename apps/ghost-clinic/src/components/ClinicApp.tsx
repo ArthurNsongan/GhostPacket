@@ -194,7 +194,7 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
                         setSealed(null);
                         setTab("prescribe");
                       }}
-                      className="rounded-md px-2 py-1 text-[12px] text-accent ring-1 ring-accent hover:bg-accent-soft"
+                      className="btn-accent px-3 py-1 text-[12px]"
                     >
                       Prescribe
                     </button>
@@ -220,7 +220,7 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
           <Panel title="New prescription" aside={<span className="font-mono text-[11px] text-mute">signed by {keyInfo.fingerprint}</span>}>
             <label className="block text-[12px] text-mist">
               Patient
-              <select value={patient?.id ?? ""} onChange={(e) => setPatientId(e.target.value)} className="mt-1 w-full rounded-md border border-grid bg-void px-2 py-1.5 text-sm text-ink">
+              <select value={patient?.id ?? ""} onChange={(e) => setPatientId(e.target.value)} className="mt-1 w-full rounded-md bg-panel-2 px-2 py-1.5 text-sm text-ink">
                 {ward.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} · {p.id}
@@ -252,7 +252,7 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
               type="button"
               onClick={seal}
               disabled={!patient || tooLong || encryptionBlocked(encryption) || !items.some((i) => i.drug.trim())}
-              className="rounded-lg bg-accent-soft px-4 py-2.5 text-sm font-semibold text-accent ring-1 ring-accent disabled:opacity-40"
+              className="btn-accent px-5 py-2.5 text-sm"
             >
               Sign the prescription
             </button>
@@ -268,7 +268,7 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
                 <VirtualHandover ghost={ghost} frame={sealedFrame} onFrame={(f, c) => receive(f, c, encryption.on ? encryption.passphrase : passphrase)} label="Hand over to the pharmacy (virtual, 30 % QR loss)" />
                 <p className="text-[12px] text-mist">Two real devices: open GhostClinic on the pharmacy phone, choose “Pharmacy”, then send from here.</p>
                 {!sealed.encrypted && (
-                  <p className="rounded-md border border-amber/40 bg-amber/10 p-2 text-[12px] text-amber">
+                  <p className="rounded-md bg-amber/10 p-2 text-[12px] text-amber">
                     Not encrypted: anyone in the waiting room can capture the drugs and the note. Turn on end-to-end encryption for sensitive prescriptions (the patient name is never in the frame).
                   </p>
                 )}
@@ -308,12 +308,12 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
             {received?.v.ok && gate && !gate.ok && (
               <IssuerGate gate={gate} verified={received.v.value} label={"medicalPrescription" in received.v.value.document.body ? received.v.value.document.body.medicalPrescription.clinic : "Issuer"} onPinned={() => setPins((p) => p + 1)} />
             )}
-            {received?.refused && <p className="rounded-lg border border-alarm/60 bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
+            {received?.refused && <p className="rounded-lg bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
             {received?.v.ok && gate?.ok && (
               <button
                 type="button"
                 onClick={dispense}
-                className={`rounded-lg px-4 py-2.5 text-sm font-semibold ring-1 ${received.dispensed?.status === "replay" ? "bg-alarm/15 text-alarm ring-alarm/50" : "bg-accent-soft text-accent ring-accent"}`}
+                className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${received.dispensed?.status === "replay" ? "bg-alarm/15 text-alarm" : "bg-accent-soft text-accent"}`}
               >
                 {received.dispensed?.status === "replay"
                   ? `Already dispensed ${new Date(received.dispensed.entry.firstSeen).toLocaleString()}: refuse`
@@ -334,7 +334,7 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
 
 function ModeSelect({ mode, onChange }: { mode: FskMode; onChange: (m: FskMode) => void }) {
   return (
-    <select value={mode} onChange={(e) => onChange(e.target.value as FskMode)} className="rounded-md border border-grid bg-void px-2 py-1 font-mono text-[11px]" aria-label="Modem mode">
+    <select value={mode} onChange={(e) => onChange(e.target.value as FskMode)} className="rounded-md bg-panel-2 px-2 py-1 font-mono text-[11px]" aria-label="Modem mode">
       <option value="robust">sound: robust</option>
       <option value="fast">sound: fast</option>
     </select>
@@ -364,7 +364,7 @@ function NewPatient() {
         <NumberField label="Age" value={age} min={0} max={120} onChange={setAge} suffix="y" />
         <label className="block text-[12px] text-mist">
           Sex
-          <select value={sex} onChange={(e) => setSex(e.target.value as "F" | "M")} className="mt-1 w-full rounded-md border border-grid bg-void px-2 py-1.5 text-sm text-ink">
+          <select value={sex} onChange={(e) => setSex(e.target.value as "F" | "M")} className="mt-1 w-full rounded-md bg-panel-2 px-2 py-1.5 text-sm text-ink">
             <option value="F">F</option>
             <option value="M">M</option>
           </select>
@@ -372,7 +372,7 @@ function NewPatient() {
       </div>
       <TextField label="Village" value={village} onChange={setVillage} />
       <TextField label="Allergies" value={allergies} onChange={setAllergies} placeholder="none known" />
-      <button type="button" onClick={add} disabled={!name.trim()} className="rounded-lg px-3 py-2 text-sm text-accent ring-1 ring-accent hover:bg-accent-soft disabled:opacity-40">
+      <button type="button" onClick={add} disabled={!name.trim()} className="btn-accent px-4 py-2 text-sm">
         Admit
       </button>
       {msg && <p className="font-mono text-[11px] text-mute">{msg}</p>}

@@ -3,6 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 
 import type { DropletFate } from "./FountainGridCanvas";
+import { PAL, rgba, watchPalette } from "./palette";
 
 export interface ConduitSink {
   /** Latest audio window: drawn as the ectoplasm waveform. */
@@ -54,9 +55,9 @@ export default function EtherConduit({ ref }: { ref?: Ref<ConduitSink> }) {
 
     // Conduit rails.
     const g = ctx.createLinearGradient(0, 0, w, 0);
-    g.addColorStop(0, "rgba(94,242,198,0.35)");
-    g.addColorStop(0.5, "rgba(167,139,250,0.25)");
-    g.addColorStop(1, "rgba(94,242,198,0.35)");
+    g.addColorStop(0, rgba(PAL.phosphor, 0.3));
+    g.addColorStop(0.5, rgba(PAL.ion, 0.22));
+    g.addColorStop(1, rgba(PAL.phosphor, 0.3));
     ctx.strokeStyle = g;
     ctx.lineWidth = 1;
     for (const y of [6, h - 6]) {
@@ -70,8 +71,8 @@ export default function EtherConduit({ ref }: { ref?: Ref<ConduitSink> }) {
     const fresh = now - waveAt.current < 400;
     const win = wave.current;
     if (win && fresh) {
-      ctx.strokeStyle = "#5EF2C6";
-      ctx.shadowColor = "#5EF2C6";
+      ctx.strokeStyle = rgba(PAL.phosphor);
+      ctx.shadowColor = rgba(PAL.phosphor);
       ctx.shadowBlur = 8;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
@@ -104,7 +105,7 @@ export default function EtherConduit({ ref }: { ref?: Ref<ConduitSink> }) {
         }
         continue;
       }
-      ctx.fillStyle = o.lost && t > 0.3 ? "#F43F5E" : t < 0.5 ? "#A78BFA" : "#5EF2C6";
+      ctx.fillStyle = rgba(o.lost && t > 0.3 ? PAL.alarm : t < 0.5 ? PAL.ion : PAL.phosphor);
       ctx.shadowColor = ctx.fillStyle;
       ctx.shadowBlur = 12;
       ctx.beginPath();
@@ -116,7 +117,7 @@ export default function EtherConduit({ ref }: { ref?: Ref<ConduitSink> }) {
     embers.current = embers.current.filter((e) => now - e.born < EMBER_MS);
     for (const e of embers.current) {
       const t = (now - e.born) / 1000;
-      ctx.fillStyle = `rgba(244,63,94,${1 - (now - e.born) / EMBER_MS})`;
+      ctx.fillStyle = rgba(PAL.alarm, 1 - (now - e.born) / EMBER_MS);
       ctx.fillRect(e.x + e.vx * t, e.y + e.vy * t + 40 * t * t, 2, 2);
     }
 
@@ -148,6 +149,7 @@ export default function EtherConduit({ ref }: { ref?: Ref<ConduitSink> }) {
   }));
 
   useEffect(() => {
+    watchPalette();
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     kick();
     return () => {

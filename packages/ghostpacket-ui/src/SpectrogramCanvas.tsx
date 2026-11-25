@@ -2,6 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { Core, SpectrumAnalyzer } from "ghostpacket-sdk/wasm-bridge";
+import { PAL, mix, rgba, watchPalette } from "./palette";
 
 export interface SignalSink {
   push(window: Float32Array, sampleRate: number): void;
@@ -25,13 +26,13 @@ const MARKERS = [
  * FSK carriers stand out.
  */
 function palette(db: number): [number, number, number] {
-  // Gradient from UI_DESIGN_GUIDELINES.md §3.2: #07080B → #0D4A3E → #5EF2C6 → #F3EFE6.
+  // Phosphor trail from the theme tokens: void → deep phosphor → phosphor → ink.
   const t = Math.max(0, Math.min(1, (db + 62) / 62));
   const stops: [number, [number, number, number]][] = [
-    [0, [7, 8, 11]],
-    [0.45, [13, 74, 62]],
-    [0.85, [94, 242, 198]],
-    [1, [243, 239, 230]],
+    [0, PAL.void],
+    [0.45, mix(PAL.void, PAL.phosphor, 0.3)],
+    [0.85, PAL.phosphor],
+    [1, PAL.ink],
   ];
   for (let i = 1; i < stops.length; i++) {
     const [t1, c1] = stops[i] as [number, [number, number, number]];
@@ -41,10 +42,10 @@ function palette(db: number): [number, number, number] {
       return [Math.round(c0[0] + (c1[0] - c0[0]) * u), Math.round(c0[1] + (c1[1] - c0[1]) * u), Math.round(c0[2] + (c1[2] - c0[2]) * u)];
     }
   }
-  return [243, 239, 230];
+  return PAL.ink;
 }
 
-const SCREEN = "#07080B";
+const screen = () => rgba(PAL.void);
 
 /** Scrolling FFT waterfall (FFT computed in WASM) with FSK carrier markers. */
 export default function SpectrogramCanvas({
@@ -62,6 +63,7 @@ export default function SpectrogramCanvas({
   const analyzer = useRef<SpectrumAnalyzer | null>(null);
 
   useEffect(() => {
+    watchPalette();
     if (!core) return;
     analyzer.current = core.spectrum(1024);
     return () => {
@@ -101,7 +103,7 @@ export default function SpectrogramCanvas({
       const c = canvas.current;
       const ctx = c?.getContext("2d");
       if (c && ctx) {
-        ctx.fillStyle = SCREEN;
+        ctx.fillStyle = screen();
         ctx.fillRect(0, 0, c.width, c.height);
       }
     },
@@ -111,7 +113,7 @@ export default function SpectrogramCanvas({
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (c && ctx) {
-      ctx.fillStyle = SCREEN;
+      ctx.fillStyle = screen();
       ctx.fillRect(0, 0, c.width, c.height);
     }
   }, []);
@@ -135,7 +137,7 @@ export default function SpectrogramCanvas({
       <div className="absolute left-2 top-2 flex items-center gap-2">
         <span
           className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-widest ${
-            syncLocked ? "bg-phosphor text-void pulse" : "bg-void/80 text-mute ring-1 ring-grid"
+            syncLocked ? "bg-phosphor text-void pulse" : "bg-void/80 text-mute"
           }`}
         >
           {syncLocked ? "SYNC LOCK" : "NO SYNC"}
@@ -154,9 +156,9 @@ export function Oscilloscope({ ref }: { ref?: Ref<SignalSink> }) {
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
-    ctx.fillStyle = SCREEN;
+    ctx.fillStyle = screen();
     ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = "rgba(243,239,230,0.06)";
+    ctx.strokeStyle = rgba(PAL.ink, 0.06);
     ctx.lineWidth = 1;
     for (let x = 0; x <= c.width; x += c.width / 10) {
       ctx.beginPath();
@@ -169,8 +171,8 @@ export function Oscilloscope({ ref }: { ref?: Ref<SignalSink> }) {
     ctx.lineTo(c.width, c.height / 2);
     ctx.stroke();
     if (!window || window.length === 0) return;
-    ctx.strokeStyle = "#5EF2C6";
-    ctx.shadowColor = "#5EF2C6";
+    ctx.strokeStyle = rgba(PAL.phosphor);
+    ctx.shadowColor = rgba(PAL.phosphor);
     ctx.shadowBlur = 6;
     ctx.lineWidth = 1.5;
     ctx.beginPath();

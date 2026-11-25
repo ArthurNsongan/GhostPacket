@@ -97,7 +97,7 @@ export default function PayloadComposer({
             disabled={busy}
             onClick={() => onSource(p.id)}
             className={`rounded-md px-2 py-1.5 text-[12px] leading-tight transition ${
-              p.id === source ? "bg-phosphor/15 text-phosphor ring-1 ring-phosphor/40" : "text-mute hover:text-ink"
+              p.id === source ? "bg-ink/[0.08] text-ink font-medium" : "text-mute hover:text-ink"
             }`}
           >
             {p.label}
@@ -105,7 +105,7 @@ export default function PayloadComposer({
         ))}
       </div>
 
-      <div className="rounded-lg border border-grid bg-void/40 p-3">
+      <div className="rounded-xl bg-ink/[0.035] p-3">
         {source === "message" ? (
           <MessageComposer value={message} onChange={onMessage} limits={limits} disabled={busy} />
         ) : (
@@ -121,7 +121,7 @@ export default function PayloadComposer({
                 value={draftText}
                 onChange={(e) => onDraftText(e.target.value)}
                 spellCheck={false}
-                className="h-56 w-full resize-y rounded-md border border-grid bg-void p-2 font-mono text-[11px] text-ink outline-none focus:border-phosphor/60"
+                className="h-56 w-full resize-y rounded-md bg-ink/[0.045] p-2 font-mono text-[11px] text-ink outline-none focus:bg-ink/[0.08]"
                 aria-label="Document as JSON"
               />
             ) : parsed ? (
@@ -136,7 +136,7 @@ export default function PayloadComposer({
 
       <EncryptionToggle value={encryption} onChange={onEncryption} disabled={busy} limits={limits} demo={demoPassphrase} />
 
-      <div className="space-y-2 rounded-lg border border-grid bg-void/40 p-3">
+      <div className="space-y-2 rounded-xl bg-ink/[0.035] p-3">
         <div className="flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-widest text-mute">Byte budget (US-02)</span>
           {encoded?.ok && <span className="font-mono text-[11px] text-phosphor">÷{(jsonBytes / encoded.value.frameLen).toFixed(1)} vs JSON</span>}
@@ -156,7 +156,7 @@ export default function PayloadComposer({
         )}
       </div>
 
-      <div className="rounded-lg border border-grid bg-void/40 p-3">
+      <div className="rounded-xl bg-ink/[0.035] p-3">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-widest text-mute">Emitter screen · fountain QR</span>
           <span className="font-mono text-[10px] text-mute">{qrCaption}</span>
@@ -169,7 +169,7 @@ export default function PayloadComposer({
             type="button"
             onClick={onSendFsk}
             disabled={busy || !encoded?.ok}
-            className="rounded-md border border-phosphor/40 px-2 py-2 text-[12px] text-phosphor hover:bg-phosphor/10 disabled:opacity-40"
+            className="rounded-md bg-phosphor/10 px-2 py-2 text-[12px] text-phosphor hover:bg-phosphor/20 disabled:opacity-40"
           >
             Send over sound
           </button>
@@ -177,7 +177,7 @@ export default function PayloadComposer({
             type="button"
             onClick={onSendQr}
             disabled={busy || !encoded?.ok}
-            className="rounded-md border border-ion/40 px-2 py-2 text-[12px] text-ion hover:bg-ion/10 disabled:opacity-40"
+            className="rounded-md bg-ion/10 px-2 py-2 text-[12px] text-ion hover:bg-ion/20 disabled:opacity-40"
           >
             Send over QR
           </button>
@@ -186,7 +186,7 @@ export default function PayloadComposer({
             onClick={onExport}
             disabled={busy || !encoded?.ok}
             title="Download the signed frame as a .gpkt file"
-            className="rounded-md border border-grid px-2 py-2 text-[12px] text-mist hover:text-ink disabled:opacity-40"
+            className="rounded-md bg-ink/[0.06] transition-colors hover:bg-ink/[0.1] px-2 py-2 text-[12px] text-mist hover:text-ink disabled:opacity-40"
           >
             Export .gpkt
           </button>

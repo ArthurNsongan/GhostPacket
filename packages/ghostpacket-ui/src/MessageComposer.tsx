@@ -26,7 +26,7 @@ export default function MessageComposer({
     const f = used(name);
     return f ? <span className={`font-mono text-[10px] ${f.used > f.max ? "text-alarm" : "text-mute"}`}>{f.used} / {f.max} B</span> : null;
   };
-  const input = "w-full rounded-md border border-grid bg-void px-2 py-1.5 text-sm text-ink outline-none focus:border-phosphor/60 disabled:opacity-50";
+  const input = "w-full rounded-md bg-ink/[0.045] px-2 py-1.5 text-sm text-ink outline-none focus:bg-ink/[0.08] disabled:opacity-50";
   return (
     <div className="space-y-2">
       <label className="block">
@@ -96,7 +96,7 @@ export function EncryptionToggle({
             disabled={disabled}
             maxLength={limits.maxPassphraseBytes}
             onChange={(e) => onChange({ ...value, passphrase: e.target.value })}
-            className="mt-1 w-full rounded-md border border-grid bg-void px-2 py-1.5 font-mono text-sm text-ink outline-none focus:border-ion/60"
+            className="mt-1 w-full rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-sm text-ink outline-none focus:bg-ink/[0.08]"
           />
           {!value.passphrase.trim() ? (
             <span className="mt-1 block font-mono text-[11px] text-alarm">Enter a passphrase, or turn encryption off. Nothing is sent until then.</span>

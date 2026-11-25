@@ -89,10 +89,10 @@ export function AirSender({ ghost, frame, mode, caption }: { ghost: GhostState; 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" onClick={active === "sound" ? stop : sendSound} disabled={!frame || active === "qr"} className={`${btn} border-phosphor/50 text-phosphor hover:bg-phosphor/10`}>
+        <button type="button" onClick={active === "sound" ? stop : sendSound} disabled={!frame || active === "qr"} className={`${btn} bg-phosphor/10 text-phosphor hover:bg-phosphor/20`}>
           {active === "sound" ? "Stop sound" : "Send over the speaker"}
         </button>
-        <button type="button" onClick={sendQr} disabled={!frame || active !== null} className={`${btn} border-ion/50 text-ion hover:bg-ion/10`}>
+        <button type="button" onClick={sendQr} disabled={!frame || active !== null} className={`${btn} bg-ion/10 text-ion hover:bg-ion/20`}>
           Show the full-screen QR stream
         </button>
       </div>
@@ -213,10 +213,10 @@ export function AirReceiver({ ghost, mode, onFrame }: { ghost: GhostState; mode:
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" onClick={active === "mic" ? stop : listen} disabled={active === "camera"} className={`${btn} border-phosphor/50 text-phosphor hover:bg-phosphor/10`}>
+        <button type="button" onClick={active === "mic" ? stop : listen} disabled={active === "camera"} className={`${btn} bg-phosphor/10 text-phosphor hover:bg-phosphor/20`}>
           {active === "mic" ? "Stop listening" : "Listen (microphone)"}
         </button>
-        <button type="button" onClick={active === "camera" ? stop : () => void scan()} disabled={active === "mic"} className={`${btn} border-ion/50 text-ion hover:bg-ion/10`}>
+        <button type="button" onClick={active === "camera" ? stop : () => void scan()} disabled={active === "mic"} className={`${btn} bg-ion/10 text-ion hover:bg-ion/20`}>
           {active === "camera" ? "Stop camera" : "Scan the screen (camera)"}
         </button>
       </div>

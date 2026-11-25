@@ -17,11 +17,11 @@ import { GhostProvider, useShell } from "./GhostContext";
 import SpectralEmblem from "./SpectralEmblem";
 import ThemeControls from "./ThemeControls";
 
-const BADGE: Record<AirGapState, { text: string; tone: string }> = {
-  ready: { text: "AIR-GAP READY", tone: "text-phosphor ring-phosphor/40" },
-  "offline-active": { text: "OFFLINE · AIR-GAP ACTIVE", tone: "text-phosphor ring-phosphor/60 pulse" },
-  online: { text: "ONLINE · CACHING", tone: "text-mist ring-grid" },
-  "offline-uncached": { text: "OFFLINE", tone: "text-amber ring-amber/50" },
+const BADGE: Record<AirGapState, { text: string; dot: string; tone: string }> = {
+  ready: { text: "Air-gap ready", dot: "bg-phosphor", tone: "text-mist" },
+  "offline-active": { text: "Offline · air-gap active", dot: "bg-phosphor pulse", tone: "text-phosphor" },
+  online: { text: "Online · caching", dot: "bg-mute", tone: "text-mute" },
+  "offline-uncached": { text: "Offline", dot: "bg-amber", tone: "text-amber" },
 };
 
 export interface AppFrameProps {
@@ -77,24 +77,25 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
       <BloodMoonAtmosphere />
       <BatSwarmLayer />
       <header className="glass sticky top-0 z-40 border-b border-grid">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-6 gap-y-2 px-3 py-2 sm:px-6">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-8 gap-y-2 px-4 py-2.5 sm:px-8">
           {homeLink(
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2.5">
               <SpectralEmblem app={app} />
-              <span className="display-gothic text-2xl leading-none text-ink">
+              <span className="display-gothic text-[1.65rem] leading-none text-ink">
                 {brand[0]}
-                <em className="text-accent not-italic">{brand[1]}</em>
+                <em className="text-accent">{brand[1]}</em>
               </span>
             </span>,
           )}
           {nav && (
-            <nav className="order-3 flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto" aria-label="Main">
+            <nav className="order-3 -mx-1 flex w-full gap-0.5 overflow-x-auto sm:order-none sm:w-auto" aria-label="Main">
               {nav}
             </nav>
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 font-mono text-[10px] font-bold tracking-widest ring-1 ${BADGE[air].tone}`} title="Offline service worker status">
-              ● {BADGE[air].text}
+          <div className="ml-auto flex items-center gap-4">
+            <span className={`flex items-center gap-2 whitespace-nowrap text-[12px] ${BADGE[air].tone}`} title="Offline service worker status">
+              <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${BADGE[air].dot}`} />
+              {BADGE[air].text}
             </span>
             <ThemeControls />
             {actions}
@@ -102,24 +103,24 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-[1500px] flex-col gap-4 px-3 py-4 sm:px-6">
+      <main className="mx-auto flex max-w-[1500px] flex-col gap-5 px-4 py-6 sm:px-8">
         {banner && (
-          <div className="rounded-lg border border-amber/50 bg-amber/10 px-4 py-2 text-sm text-amber" role="status">
+          <div className="rounded-xl bg-amber/10 px-4 py-2.5 text-sm text-amber" role="status">
             {banner}
           </div>
         )}
         {loadError && (
-          <div className="rounded-lg border border-alarm/60 bg-alarm/10 px-4 py-3 text-sm text-alarm" role="alert">
+          <div className="rounded-xl bg-alarm/12 px-4 py-3 text-sm text-alarm" role="alert">
             The WebAssembly module failed to load: {loadError}
           </div>
         )}
         {children}
       </main>
 
-      <footer className="mx-auto mt-2 flex max-w-[1500px] flex-wrap justify-between gap-2 border-t border-grid px-3 py-3 font-mono text-[10px] text-mute sm:px-6">
+      <footer className="mx-auto mt-6 flex max-w-[1500px] flex-wrap justify-between gap-2 border-t border-grid px-4 py-5 text-[11px] text-mute sm:px-8">
         <span>
           ghostpacket-core {ghost?.core.version ?? "…"} · WASM loaded {loadMs === null ? "…" : `in ${loadMs.toFixed(0)} ms`} · 0 network calls · signing key{" "}
-          {ghost ? <span className="text-ion">{ghost.keyInfo.fingerprint}</span> : "…"} generated in this tab
+          {ghost ? <span className="font-mono text-ion">{ghost.keyInfo.fingerprint}</span> : "…"} generated in this tab
         </span>
         <span>{footerNote ?? "Frame ≤ 512 B · Ed25519 · CRC32 · ChaCha20-Poly1305 · Reed-Solomon · Luby Transform · MIT"}</span>
       </footer>
@@ -127,7 +128,7 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
   );
 }
 
-/** Pill style for navigation links, shared by every app. */
+/** Navigation link style shared by every app: the active page gets a tonal fill and weight, never an outline. */
 export function navPillClass(active: boolean): string {
-  return `whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition ${active ? "bg-phosphor/15 text-phosphor ring-1 ring-phosphor/40" : "text-mist hover:text-ink"}`;
+  return `whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors ${active ? "bg-ink/[0.08] font-medium text-ink" : "text-mist hover:bg-ink/[0.04] hover:text-ink"}`;
 }

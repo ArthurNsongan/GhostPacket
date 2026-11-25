@@ -38,7 +38,7 @@ export default function JudgeQuickDemoBar({
             onClick={running ? onCancel : onRun}
             disabled={disabled}
             className={`px-6 py-3 text-base font-bold tracking-wide transition disabled:opacity-40 ${
-              running ? "rounded-full bg-void text-amber ring-1 ring-amber/60" : "cta-ember hover:brightness-110"
+              running ? "rounded-full bg-amber/10 text-amber" : "cta-ember hover:brightness-110"
             }`}
           >
             {running ? "Stop" : "▶ Summon the full demo"}
@@ -65,7 +65,7 @@ export default function JudgeQuickDemoBar({
                   done
                     ? "bg-phosphor/15 text-phosphor"
                     : active
-                      ? "bg-ion/15 text-ion ring-1 ring-ion/50"
+                      ? "bg-ion/15 text-ion font-medium"
                       : "bg-void/60 text-mute"
                 }`}
               >
@@ -79,7 +79,7 @@ export default function JudgeQuickDemoBar({
 
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[30rem]">
           {kpis.map((k) => (
-            <div key={k.label} className="rounded-md border border-grid bg-void/60 px-2 py-1">
+            <div key={k.label} className="rounded-lg bg-ink/[0.035] px-2 py-1">
               <dt className="text-[9px] uppercase tracking-widest text-mute">{k.label}</dt>
               <dd className={`font-mono text-sm ${k.good ? "text-phosphor" : "text-ink"}`}>{k.value}</dd>
             </div>

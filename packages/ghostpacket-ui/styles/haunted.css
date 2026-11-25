@@ -1,54 +1,61 @@
-/* GhostPacket V3 theme layer: "Gothic Lantern & Ectoplasm" (HALLOWEEN_REDESIGN_PLAN.md).
- * Imported by each app's global CSS, after its Tailwind @theme block.
+/* GhostPacket theme layer — "Midnight Atelier" (V4, HALLOWEEN_REDESIGN_PLAN.md).
+ * Imported at the end of ghostpacket.css.
  * - data-theme="haunted" (default) | "clean"  on <html>
  * - data-app="portal" | "clinic" | "tontine"   on <html>
- * Components keep their functional class names (phosphor, amber, ion, alarm…):
- * only the CSS variables behind them change. */
-@import "@fontsource/cinzel-decorative/700.css";
+ * One warm accent per app (three shades of candlelight); green is reserved for
+ * "verified", garnet for errors. Decoration is narrative: a pale moon, a candle glow
+ * and grain at rest; bats only during a transmission, a blood moon on rejection. */
 
 :root {
-  --font-gothic: "Cinzel Decorative", var(--font-serif), serif;
-  --color-accent: var(--color-amber);
-  --color-accent-2: var(--color-phosphor);
+  --font-gothic: var(--font-serif);
 }
 
-/* ---- Haunted palette: Midnight Crypt, Pumpkin Flame & Ectoplasm ----------- */
+/* ---- Haunted palette: aubergine night, candlelight, mist green, garnet ------- */
 :root[data-theme="haunted"] {
-  --color-void: #06050a;
-  --color-panel: #0e0c15;
-  --color-panel-2: #171422;
-  --color-grid: rgba(245, 239, 230, 0.09);
-  --color-phosphor: #5ef2c6;
-  --color-phosphor-dim: rgba(94, 242, 198, 0.14);
-  --color-ion: #a855f7;
-  --color-amber: #ff8a2a;
-  --color-ember: #f59e0b;
-  --color-alarm: #e11d48;
-  --color-ink: #f5efe6;
-  --color-mist: #a7a1b6;
-  --color-mute: #6d6780;
-  --color-accent: #ff7a18;
-  --color-accent-2: #5ef2c6;
+  --color-void: oklch(0.14 0.02 300);
+  --color-panel: oklch(0.17 0.02 300);
+  --color-panel-2: oklch(0.21 0.022 300);
+  --color-grid: oklch(0.94 0.015 80 / 0.08);
+  --color-phosphor: oklch(0.85 0.12 170);
+  --color-phosphor-dim: oklch(0.85 0.12 170 / 0.14);
+  --color-ion: oklch(0.8 0.03 290);
+  --color-amber: oklch(0.78 0.14 65);
+  --color-ember: oklch(0.72 0.15 55);
+  --color-alarm: oklch(0.62 0.2 15);
+  --color-ink: oklch(0.94 0.015 80);
+  --color-mist: oklch(0.74 0.02 300);
+  --color-mute: oklch(0.58 0.02 300);
 }
 
-/* Per-app identity (Skeleton Crew: one skeleton, three faces). */
+/* Per-app identity: one skeleton, three shades of candlelight. */
+:root {
+  --color-accent: oklch(0.78 0.14 65);
+  --color-accent-ink: oklch(0.24 0.05 55);
+}
 :root[data-app="clinic"] {
-  --color-accent: #34d399;
-  --color-accent-2: #f5efe6;
+  --color-accent: oklch(0.76 0.11 45);
+  --color-accent-ink: oklch(0.24 0.05 40);
 }
 :root[data-app="tontine"] {
-  --color-accent: #f59e0b;
-  --color-accent-2: #9333ea;
+  --color-accent: oklch(0.83 0.12 85);
+  --color-accent-ink: oklch(0.26 0.05 80);
 }
 
-/* ---- Clean Field Mode: calm, high contrast, no decoration --------------- */
+/* ---- Clean Field Mode: calm, higher contrast, no decoration ----------------- */
 :root[data-theme="clean"] {
-  --color-void: #0b0d12;
-  --color-panel: #12151c;
-  --color-panel-2: #1a1e27;
-  --color-grid: rgba(243, 239, 230, 0.14);
-  --color-mist: #b4bccb;
-  --color-mute: #8a93a5;
+  --color-void: oklch(0.17 0.008 280);
+  --color-panel: oklch(0.21 0.008 280);
+  --color-panel-2: oklch(0.25 0.01 280);
+  --color-grid: oklch(0.94 0.01 80 / 0.14);
+  --color-phosphor: oklch(0.86 0.12 170);
+  --color-phosphor-dim: oklch(0.86 0.12 170 / 0.16);
+  --color-ion: oklch(0.84 0.03 290);
+  --color-amber: oklch(0.8 0.14 65);
+  --color-ember: oklch(0.74 0.15 55);
+  --color-alarm: oklch(0.66 0.2 15);
+  --color-ink: oklch(0.96 0.01 80);
+  --color-mist: oklch(0.8 0.012 280);
+  --color-mute: oklch(0.66 0.012 280);
 }
 :root[data-theme="clean"] .mist,
 :root[data-theme="clean"] .grain,
@@ -60,130 +67,94 @@
 }
 
 /* ---- Typography ------------------------------------------------------------ */
+/* Wordmarks and short app titles: Fraunces at display size, soft and "wonky". */
 .display-gothic {
   font-family: var(--font-serif);
+  font-weight: 480;
   letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
 }
-:root[data-theme="haunted"] .display-gothic {
-  font-family: var(--font-gothic);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-.text-accent {
-  color: var(--color-accent);
-}
-.ring-accent {
-  --tw-ring-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+:root[data-theme="clean"] .display-gothic {
+  font-variation-settings: "opsz" 144, "SOFT" 30, "WONK" 0;
 }
 .bg-accent-soft {
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 14%, transparent);
 }
 
-/* ---- Haunted mist: warmer, with candle flicker ------------------------------ */
-:root[data-theme="haunted"] .mist {
-  background:
-    radial-gradient(circle at 18% 22%, rgba(94, 242, 198, 0.08), transparent 38%),
-    radial-gradient(circle at 82% 16%, rgba(168, 85, 247, 0.1), transparent 40%),
-    radial-gradient(circle at 50% 88%, rgba(255, 122, 24, 0.07), transparent 36%);
-}
-
-/* ---- Architectural cobwebs on instrument cards ------------------------------ */
-:root[data-theme="haunted"] .panel:not(.crt)::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 92px;
-  height: 92px;
-  pointer-events: none;
-  opacity: 0.14;
-  border-top-right-radius: inherit;
-  background: no-repeat top right /
-    92px 92px
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 92' fill='none' stroke='%23e8e2f2' stroke-width='0.6'><path d='M92 0 L4 0 M92 0 L12 40 M92 0 L40 70 M92 0 L70 88 M92 0 L92 88'/><path d='M74 0 Q78 10 92 14 M54 0 Q62 20 92 30 M34 0 Q46 32 92 48 M18 0 Q32 44 92 66'/><path d='M80 7 Q84 14 90 16 M66 9 Q74 22 88 30'/></svg>");
-}
-
-/* ---- Moon, wrought-iron gate, lightning (BloodMoonAtmosphere) --------------- */
+/* ---- Moon: a pale, softly shaded gibbous moon; garnet during a blood moon ---- */
 .moon {
   position: fixed;
-  top: calc(110px + 4vh);
-  right: 5vw;
-  width: clamp(70px, 9vw, 130px);
+  top: calc(96px + 5vh);
+  right: 6vw;
+  width: clamp(64px, 8vw, 116px);
   aspect-ratio: 1;
   z-index: -2;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(circle at 38% 36%, #f6f1e7 0 38%, #d9d2c3 58%, rgba(217, 210, 195, 0) 72%);
-  box-shadow: 0 0 60px 10px rgba(245, 239, 230, 0.08);
-  opacity: 0.22;
-  transition: background 600ms ease, box-shadow 600ms ease, opacity 600ms ease;
+  background: radial-gradient(circle at 36% 34%, oklch(0.97 0.02 85) 0 22%, oklch(0.88 0.025 80) 48%, oklch(0.8 0.03 75) 70%);
+  box-shadow:
+    inset -16px -8px 26px -4px oklch(0.14 0.02 300 / 0.85),
+    0 0 90px 20px oklch(0.95 0.02 85 / 0.05);
+  opacity: 0.2;
+  transition:
+    background 600ms ease,
+    box-shadow 600ms ease,
+    opacity 600ms ease;
 }
 .blood-moon .moon {
-  background: radial-gradient(circle at 38% 36%, #fb7185 0 34%, #b91c1c 58%, rgba(153, 27, 27, 0) 72%);
-  box-shadow: 0 0 90px 18px rgba(225, 29, 72, 0.32);
-  opacity: 0.55;
-  transition-duration: 120ms;
-}
-.iron-gate {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 120px;
-  z-index: -2;
-  pointer-events: none;
-  opacity: 0.07;
-  color: #f5efe6;
-}
-.lightning {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-  background: rgba(240, 236, 255, 0.55);
-  opacity: 0;
-}
-.blood-moon .lightning {
-  animation: lightning 420ms ease-out both;
-}
-@keyframes lightning {
-  0% { opacity: 0; }
-  8% { opacity: 0.55; }
-  18% { opacity: 0; }
-  26% { opacity: 0.3; }
-  40%, 100% { opacity: 0; }
-}
-/* <html> carries both data-theme and the blood-moon class. */
-:root.blood-moon .mist::after {
-  animation-duration: 1.6s;
+  background: radial-gradient(circle at 36% 34%, oklch(0.72 0.17 20) 0 22%, oklch(0.55 0.2 22) 55%, oklch(0.42 0.17 22) 75%);
+  box-shadow:
+    inset -16px -8px 26px -4px oklch(0.14 0.02 300 / 0.7),
+    0 0 110px 26px oklch(0.6 0.2 20 / 0.22);
+  opacity: 0.5;
+  transition-duration: 160ms;
 }
 
-/* ---- Lantern / emblem --------------------------------------------------------- */
+/* ---- Emblem light ------------------------------------------------------------ */
 .lantern-flicker {
-  animation: candle 3.2s ease-in-out infinite;
+  animation: candle 3.6s ease-in-out infinite;
 }
 @keyframes candle {
-  0%, 100% { opacity: 0.92; }
-  12% { opacity: 0.78; }
-  20% { opacity: 1; }
-  47% { opacity: 0.86; }
-  63% { opacity: 1; }
-  80% { opacity: 0.82; }
+  0%,
+  100% {
+    opacity: 0.94;
+  }
+  14% {
+    opacity: 0.82;
+  }
+  22% {
+    opacity: 1;
+  }
+  48% {
+    opacity: 0.88;
+  }
+  64% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 0.86;
+  }
 }
 .lantern-tremor {
   animation: tremor 90ms linear 6;
 }
 @keyframes tremor {
-  0%, 100% { transform: translate(0, 0); }
-  25% { transform: translate(-1.5px, 0.5px); }
-  75% { transform: translate(1.5px, -0.5px); }
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-1.5px, 0.5px);
+  }
+  75% {
+    transform: translate(1.5px, -0.5px);
+  }
 }
 
 /* ---- Reduced motion: keep states, drop decoration ------------------------------ */
 @media (prefers-reduced-motion: reduce) {
   .lantern-flicker,
-  .lantern-tremor,
-  .blood-moon .lightning {
+  .lantern-tremor {
     animation: none;
   }
   .moon {

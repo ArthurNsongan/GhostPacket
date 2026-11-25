@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { PAL, rgba, watchPalette } from "./palette";
 
 export type DropletFate = "ok" | "drop" | "unreadable" | "duplicate" | "error";
 
@@ -43,6 +44,7 @@ export default function FountainGridCanvas({ view }: { view: FountainView }) {
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
+    watchPalette();
     // Domino cascade: block n of the cascade lights up 35 ms after block n-1.
     const start = performance.now();
     const order = view.flash;
@@ -65,25 +67,25 @@ export default function FountainGridCanvas({ view }: { view: FountainView }) {
       const done = (view.decoded[i] ?? false) && (pos < 0 || still || elapsed >= pos * 35);
       ctx.shadowBlur = 0;
       if (!exists) {
-        ctx.strokeStyle = "rgba(243,239,230,0.08)";
+        ctx.strokeStyle = rgba(PAL.ink, 0.08);
         ctx.setLineDash([3, 3]);
         ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
         ctx.setLineDash([]);
         continue;
       }
       if (done) {
-        ctx.fillStyle = flash ? "#F3EFE6" : "#5EF2C6";
-        ctx.shadowColor = "#5EF2C6";
+        ctx.fillStyle = rgba(flash ? PAL.ink : PAL.phosphor);
+        ctx.shadowColor = rgba(PAL.phosphor);
         ctx.shadowBlur = flash ? 18 : 6;
       } else {
-        ctx.fillStyle = "#141720";
+        ctx.fillStyle = rgba(PAL["panel-2"]);
       }
       ctx.fillRect(x, y, CELL, CELL);
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = done ? "#5EF2C6" : "rgba(243,239,230,0.10)";
+      ctx.strokeStyle = done ? rgba(PAL.phosphor) : rgba(PAL.ink, 0.1);
       ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
-      ctx.fillStyle = done ? "#07080B" : "#5C6475";
-      ctx.font = "10px ui-monospace, monospace";
+      ctx.fillStyle = rgba(done ? PAL.void : PAL.mute);
+      ctx.font = "10px \"Geist Mono Variable\", ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(`B${i}`, x + CELL / 2, y + CELL / 2);
@@ -127,9 +129,9 @@ export default function FountainGridCanvas({ view }: { view: FountainView }) {
 
 function Stat({ label, value, good }: { label: string; value: string; good?: boolean }) {
   return (
-    <div className="rounded-md border border-grid bg-void/60 px-2 py-1">
+    <div className="rounded-lg bg-ink/[0.035] px-2 py-1">
       <div className="text-[9px] uppercase tracking-widest text-mute">{label}</div>
-      <div className={good ? "text-phosphor glow" : "text-ink"}>{value}</div>
+      <div className={good ? "text-phosphor" : "text-ink"}>{value}</div>
     </div>
   );
 }

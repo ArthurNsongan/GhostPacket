@@ -157,11 +157,11 @@ check(
 );
 await click("Sync");
 check("clinic: verified proof queued for opt-in sync", await until(`document.body.innerText.includes("PENDING")`));
-await click("HAUNTED");
+await click("Haunted mode");
 // Rendered boxes of the moon and the bat canvas: none once the decoration is hidden.
 const clean = await ev(`[document.documentElement.dataset.theme, document.querySelector(".moon").getClientRects().length + document.querySelector("canvas.haunt-only").getClientRects().length].join("/")`);
 check("clinic: Clean Field Mode hides the decoration", clean === "clean/0", clean);
-await click("CLEAN FIELD");
+await click("Clean field mode");
 const swClinic = await until(`navigator.serviceWorker.getRegistration().then((r) => r && r.scope)`, 10000);
 check("clinic: own service worker scope", typeof swClinic === "string" && swClinic.endsWith("/GhostPacket/clinic/"), swClinic);
 

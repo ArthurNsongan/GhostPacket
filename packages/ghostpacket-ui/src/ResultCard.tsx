@@ -41,7 +41,7 @@ export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; d
         <>
           <Row k="Group" v={body.tontineReceipt.group} />
           <Row k="Member" v={body.tontineReceipt.member} />
-          <Row k="Amount" v={<span className="font-mono text-phosphor">{amount(body.tontineReceipt.amountMinor, body.tontineReceipt.currency)}</span>} />
+          <Row k="Amount" v={<span className="font-mono text-ink">{amount(body.tontineReceipt.amountMinor, body.tontineReceipt.currency)}</span>} />
           <Row k="Cycle" v={`#${body.tontineReceipt.cycle}`} />
           <Row k="Collector" v={body.tontineReceipt.collector} />
           <Row k="Note" v={body.tontineReceipt.note} />
@@ -100,15 +100,15 @@ export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; d
 
 /** Minimal geometric seal: stamped when intact, cracked when broken. */
 function Seal({ broken = false }: { broken?: boolean }) {
-  const color = broken ? "#F43F5E" : "#5EF2C6";
+  const color = broken ? "var(--color-alarm)" : "var(--color-phosphor)";
   return (
     <span className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center" aria-hidden>
       {!broken && <span className="seal-ripple absolute inset-0 rounded-full border border-phosphor/60" />}
-      <svg viewBox="0 0 48 48" className={`seal h-12 w-12 ${broken ? "" : "drop-shadow-[0_0_8px_rgba(94,242,198,0.6)]"}`}>
+      <svg viewBox="0 0 48 48" className={`seal h-12 w-12 ${broken ? "" : "drop-shadow-[0_0_10px_color-mix(in_oklab,var(--color-phosphor)_45%,transparent)]"}`}>
         <polygon points="24,3 42,13.5 42,34.5 24,45 6,34.5 6,13.5" fill="none" stroke={color} strokeWidth="2" />
         <circle cx="24" cy="24" r="10" fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={broken ? "4 3" : undefined} />
         {broken ? (
-          <path d="M22 4 L27 17 L20 25 L28 32 L23 45" fill="none" stroke="#07080B" strokeWidth="3" />
+          <path d="M22 4 L27 17 L20 25 L28 32 L23 45" fill="none" stroke="var(--color-void)" strokeWidth="3" />
         ) : (
           <path d="M18.5 24.5 L22.5 28.5 L30 20" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         )}
@@ -160,7 +160,7 @@ export default function ResultCard({
   }
   if (!verification.ok) {
     return (
-      <div className="tampered flex gap-3 rounded-lg border border-alarm/70 bg-alarm/10 p-4" role="alert">
+      <div className="tampered flex gap-3 rounded-lg bg-alarm/10 p-4" role="alert">
         <Seal broken />
         <div>
           <div className="chroma font-mono text-sm font-bold tracking-widest text-alarm glow-alarm">REJECTED · {verification.error.code}</div>
@@ -173,7 +173,7 @@ export default function ResultCard({
   }
   const v = verification.value;
   return (
-    <div className="rounded-lg border border-phosphor/60 bg-phosphor-dim p-4" role="status">
+    <div className="rounded-lg bg-phosphor-dim p-4" role="status">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-3">
           <Seal />
@@ -191,7 +191,7 @@ export default function ResultCard({
         {v.encrypted && <span className="ml-2 rounded bg-ion/15 px-1.5 py-0.5 text-ion">E2EE · decrypted on this device</span>}
       </p>
       {replay?.status === "replay" && (
-        <div className="tampered mt-2 rounded-md border border-amber/60 bg-amber/10 px-3 py-2" role="alert">
+        <div className="tampered mt-2 rounded-md bg-amber/10 px-3 py-2" role="alert">
           <p className="font-mono text-xs font-bold tracking-widest text-amber">REPLAY DETECTED · ALREADY REDEEMED</p>
           <p className="text-[12px] text-ink">
             Same issuer and document id first redeemed via {replay.entry.channel} at {new Date(replay.entry.firstSeen).toLocaleTimeString("en-GB")}. A second presentation must be refused.

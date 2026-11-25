@@ -48,14 +48,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ))}
           {APPS.map((a) => (
             // Separate static apps: a full page load, not a client-side route.
-            <a key={a.href} href={a.href} className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm text-accent hover:text-ink">
+            <a key={a.href} href={a.href} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13.5px] text-accent transition-colors hover:bg-accent/10">
               {a.label} ↗
             </a>
           ))}
         </>
       }
       actions={
-        <button type="button" onClick={() => setTelemetry(true)} className="rounded-full px-2.5 py-1 font-mono text-[10px] text-mist ring-1 ring-grid hover:text-ink">
+        <button type="button" onClick={() => setTelemetry(true)} className="whitespace-nowrap rounded-full bg-ink/[0.06] px-3 py-1.5 text-[12px] text-mist transition-colors hover:bg-ink/[0.1] hover:text-ink">
           Kiro Telemetry
         </button>
       }

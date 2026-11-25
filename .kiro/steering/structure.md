@@ -50,7 +50,8 @@ packages/ghostpacket-ui/   shared React components (npm name ghostpacket-ui): Ap
                            ThemeControls), spectrogram, fountain grid, Ether Conduit, channel controls,
                            frame inspector, result card / seal, tamper lab, ledger, identity + keyring,
                            message and payload composers, proof outbox, .gpkt verifier
-  styles/haunted.css       Haunted / Clean Field palettes, per-app accents, gothic font, cobwebs, moon
+  styles/ghostpacket.css   shared tokens, self-hosted fonts (Fraunces, Geist), panels, buttons, motion
+  styles/haunted.css       Haunted / Clean Field palettes, per-app accents, moon, emblem light
 apps/ghost-clinic/         GhostClinic (/clinic/): ward, prescriptions, pharmacy (dispense once), sync
 apps/ghost-tontine/        GhostTontine (/tontine/): members, rounds, receipts, aid vouchers (pay out once), sync
 apps/portal/               GitHub Pages site: / · /how-it-works/ · /simulation/ · /test/

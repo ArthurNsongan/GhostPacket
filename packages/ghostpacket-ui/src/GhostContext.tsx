@@ -56,5 +56,5 @@ export function WithGhost({ children }: { children: (g: GhostState) => React.Rea
   const { ghost, loadError } = useShell();
   if (ghost) return <>{children(ghost)}</>;
   if (loadError) return null;
-  return <div className="panel p-8 text-center font-mono text-sm text-mute">Loading the Rust/WASM core…</div>;
+  return <div className="panel p-10 text-center"><p className="display text-2xl italic text-mist">Waking the Rust/WASM core…</p></div>;
 }

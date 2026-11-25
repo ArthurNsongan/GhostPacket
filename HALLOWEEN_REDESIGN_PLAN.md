@@ -1,4 +1,23 @@
-# GhostPacket V3 — Halloween Redesign Plan: "Gothic Lantern & Ectoplasm"
+# GhostPacket — Halloween Redesign Plan
+
+## V4 — "Midnight Atelier" (current)
+
+V4 keeps the V3 architecture (Haunted / Clean Field modes, per-app identity, `spectral()` events, procedural sound engine) and replaces its look, which had become too costume-like:
+
+| V3 | V4 |
+|---|---|
+| Cinzel Decorative + Instrument Serif + Plus Jakarta Sans + JetBrains Mono | **Fraunces** (soft, "wonky" italic accent) + **Geist** + **Geist Mono** |
+| Four competing accents (ectoplasm, pumpkin, violet, crimson) + a different colour per app | **One warm accent** per app (amber, copper, gold); mist green = verified only; garnet = errors; violet replaced by moon silver |
+| Cobwebs on every card, wrought-iron gate, lightning flash, 6 resident bats | Moon, candle glow and grain at rest; bats only on `transmit`; Blood Moon on rejection, no lightning |
+| Filled, gold-stroked emblems | Fine-line monochrome emblems, only the light glows |
+| Accent outlines for selection, lit borders under the cursor | Tonal fills + weight for selection; a candle glow inside the panel under the cursor |
+| Three identical `globals.css` | One shared `ghostpacket-ui/styles/ghostpacket.css` |
+
+Reference: `UI_DESIGN_GUIDELINES.md`. The V3 plan below is kept for history; where it conflicts with V4, V4 wins.
+
+---
+
+## V3 — "Gothic Lantern & Ectoplasm" (superseded)
 
 > **Art Direction**: **Classy AND Scary** — inspired by *Tim Burton x A24 Gothic Cinema x Castlevania x Teenage Engineering*. Features carved pumpkins, animated bat swarms, a glowing moon & Blood Moon eclipse, hairline architectural cobwebs, and procedural spooky Web Audio sound effects — while maintaining crisp readability and high-precision telemetry.
 >

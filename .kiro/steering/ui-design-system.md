@@ -1,52 +1,56 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ["apps/*/src/**/*.ts", "apps/*/src/**/*.tsx", "apps/*/src/**/*.css", "packages/ghostpacket-ui/src/**/*.tsx"]
+fileMatchPattern: ["apps/*/src/**/*.ts", "apps/*/src/**/*.tsx", "apps/*/src/**/*.css", "packages/ghostpacket-ui/src/**/*.tsx", "packages/ghostpacket-ui/styles/*.css"]
 ---
 
-# "Spectral Telemetry" visual system
+# "Midnight Atelier" visual system (V4)
 
 Full reference: #[[file:UI_DESIGN_GUIDELINES.md]]
-V3 redesign ("Gothic Lantern & Ectoplasm"): #[[file:HALLOWEEN_REDESIGN_PLAN.md]]
+Halloween layer: #[[file:HALLOWEEN_REDESIGN_PLAN.md]]
 
-## V3: Haunted / Clean Field modes
-- `<html data-theme="haunted" | "clean" data-app="portal" | "clinic" | "tontine">`, set before first paint by `themeBootScript(app)` (`ghostpacket-sdk/theme`).
-- Palettes and per-app accents live in `packages/ghostpacket-ui/styles/haunted.css`, which overrides the `@theme` variables below. Components keep the functional class names; app accents use `text-accent`, `ring-accent`, `bg-accent-soft`.
-- Decorative layers carry `haunt-only` and are hidden in Clean Field Mode: `BatSwarmLayer`, `BloodMoonAtmosphere`, cobwebs, ambience. Under `prefers-reduced-motion` they stop moving.
-- Emblems are fine-line SVG (`SpectralEmblem`): a carved lantern for the portal, a plague-doctor mask for the clinic, a wax seal and skeleton key for the tontine. They are never emoji or clipart. Their light follows the audio level, turns ectoplasm on verify and crimson on rejection.
-- Cinzel Decorative (`display-gothic`) is for wordmarks and short titles only. Sentences stay in Instrument Serif.
-- Decoration reacts to protocol events through `spectral()` (`transmit`, `verified`, `rejected`, `replay`, `drop`, `synced`), never to document content.
-- Sound cues come from `ui-sfx` only. They are off by default, never play right before a real burst, and are silenced by the modem counter.
-- New app screens reuse `AppFrame`, `FormKit` (`TabBar`, `TextField`, `NumberField`, `Stat`, `Panel`, `Hero`) and `AirTransfer`.
+Art direction: an October campaign for a luxury house. Halloween comes through light (moon, candle glow), editorial type and restrained micro-copy, never through clichés (no cobwebs, no gothic blackletter, no neon).
 
-## Tokens (defined in each app's `src/app/globals.css`, `@theme` block)
-| Tailwind class | Hex | Meaning |
+## Where styles live
+- `packages/ghostpacket-ui/styles/ghostpacket.css`: Tailwind `@theme` tokens, self-hosted fonts, panels, buttons, atmosphere, animations. Each app's `src/app/globals.css` only imports Tailwind, declares its `@source` paths and imports this file.
+- `packages/ghostpacket-ui/styles/haunted.css`: palettes per `data-theme` (`haunted` | `clean`) and per `data-app` (`portal` | `clinic` | `tontine`), moon, emblem light.
+- `packages/ghostpacket-ui/src/palette.ts`: the same tokens resolved to RGB for Canvas 2D (`PAL`, `rgba`, `mix`, `watchPalette()`). Canvas code never hard-codes a colour.
+- `<html data-theme data-app>` is set before first paint by `themeBootScript(app)` (`ghostpacket-sdk/theme`).
+
+## Typography (self-hosted `@fontsource-variable`, no network call)
+- **Fraunces** (`font-serif`, `.display`, `.display-gothic`): titles and wordmarks. Weight ~340, `SOFT 50`. The accent word in `<em>` uses the italic with `SOFT 100, WONK 1`: that is the only "witchy" touch.
+- **Geist** (`font-sans`): all interface text, labels, buttons. `.panel-title` = Geist 550, 10.5 px, uppercase, 0.16em tracking.
+- **Geist Mono** (`font-mono`, tabular nums): only real values (Hz, dB, ms, bytes, hex, fingerprints, IDs). Not for sentences or labels.
+
+## Tokens (OKLCH, Haunted)
+| Tailwind class | Value | Meaning |
 |---|---|---|
-| `void` | `#07080B` | background (`--bg-abyss`) |
-| `panel` / `panel-2` | `#0D0F14` / `#141720` | panels, raised cards |
-| `ink` | `#F3EFE6` | primary text (bone ivory) |
-| `mist` / `mute` | `#9BA3B4` / `#5C6475` | secondary text / technical labels |
-| `phosphor` | `#5EF2C6` | ectoplasm: signal, SYNC LOCK, resolved blocks, `ED25519 VERIFIED` |
-| `amber` | `#F59E0B` | candlelight amber: 1-click demo CTA, soft warnings |
-| `ion` | `#A78BFA` | amethyst: optical QR channel |
-| `alarm` | `#F43F5E` | crimson: loss, `CRC32_MISMATCH`, `INVALID_SIGNATURE`, "Curse 1 bit" |
+| `void` | `oklch(0.14 0.02 300)` | aubergine-black background |
+| `panel` / `panel-2` | `oklch(0.17 …)` / `oklch(0.21 …)` | panels, raised surfaces |
+| `ink` / `mist` / `mute` | bone ivory / lilac grey / dim grey | text levels |
+| `accent` | candlelight amber (portal), copper (clinic), gold (tontine) | the single brand accent: CTA, italics, active tab, app links |
+| `phosphor` | mist green `oklch(0.85 0.12 170)` | signal only: acoustic channel, SYNC LOCK, resolved blocks, `ED25519 VERIFIED` |
+| `ion` | moon silver `oklch(0.8 0.03 290)` | optical QR channel, key fingerprints |
+| `amber` | candle amber | soft warnings |
+| `alarm` | garnet `oklch(0.62 0.2 15)` | loss, `CRC32_MISMATCH`, `INVALID_SIGNATURE`, replay, "Curse 1 bit" |
 
-Class names (`phosphor`, `ion`, `amber`, `alarm`) are functional: a colour change happens in `@theme`, not in components.
+Class names are functional: a colour change happens in the CSS files, never in components. Green never decorates: it means "verified / signal".
 
-## V2 components
-| Component | Role |
-|---|---|
-| `AppShell` | glass header, 4-page nav, `AIR-GAP READY` / `OFFLINE · AIR-GAP ACTIVE` badge, UI SFX toggle, Kiro Telemetry drawer, audio-reactive sigil (`effects.onLevel`), border spotlight (`--mx`/`--my` on `.panel::before`) |
-| `EtherConduit` | 60 FPS canvas bridge: real waveform + droplet orbs, lost ones shatter into crimson embers |
-| Blood Moon | `effects.bloodMoon()` adds `.blood-moon` to `<html>` for 1.4 s on any rejection (`ResultCard`) |
-| `TamperLab`, `FrameInspector` (`onCurseByte`) | attack buttons and click-any-byte, layer chips ✓ ✗ · |
-| `FountainGridCanvas` | domino cascade (35 ms stagger), `CASCADE ×N` and `GAUSS GF(2)` badges |
-| `CryptLedger`, `IdentityCard`, `MessageComposer`, `GpktVerifier`, `KiroTelemetry` | V2 features |
+## Selection and states: never an outline
+- Active nav, tab or option = tonal background + `font-medium` (`navPillClass`, `TabBar`). No `ring-*`, no accent `border-*`, no focus ring.
+- Buttons: `.cta-ember` (one primary per view), `.btn-tonal` (secondary), `.btn-accent` (row actions such as "Prescribe"), or `bg-{tone}/10 hover:bg-{tone}/20` for channel actions.
+- Inputs: `bg-ink/[0.045]`, focus = `bg-ink/[0.08]`. Alerts and status boxes: tinted background only.
+- Keyboard focus (`:focus-visible`) = underline + slight brightening, defined globally.
+- `.panel` hover: a warm candle glow inside the panel (`--mx`/`--my` set by `AppFrame`), not a lit border.
 
-UI sounds (`ui-sfx.ts`) are off by default and muted while the microphone listens, so they can never jam the modem.
+## Decoration (Haunted Mode only, `haunt-only`)
+- At rest: a pale moon, a candle glow from below, film grain. Nothing else.
+- On events, through `spectral()`: `transmit` sends a small bat swarm (`BatSwarmLayer`, no resident bats), `drop` turns one into sparks, `rejected` / `replay` scatters it and turns the moon garnet (`.blood-moon`, 1.6 s, no lightning).
+- Emblems (`SpectralEmblem`) are fine-line monochrome drawings (lantern, plague-doctor mask, wax seal) whose only light follows the audio level and the verdict.
+- Clean Field Mode hides every decorative layer; `prefers-reduced-motion` stops drift, reveals, stamps, pulses and bats.
 
 ## Rules
-- Every glow carries technical information; no decorative neon.
-- Fonts are self-hosted with `@fontsource` (no network call, product rule 3): `Instrument Serif` (titles), `Plus Jakarta Sans` (UI), `JetBrains Mono` + `tabular-nums` (telemetry).
-- Animations in CSS (`transform`/`opacity` only); DSP rendering in Canvas 2D through `requestAnimationFrame`, never through React state per sample.
-- `prefers-reduced-motion: reduce` turns off drift, shake, stamp and pulses.
-- UI language is English. Thematic micro-copy stays restrained ("Summon the full demo", "Curse 1 bit", "Cryptographic seal intact", "Corrupted spirit rejected"), with no Halloween clichés.
+- New screens reuse `AppFrame`, `FormKit` (`TabBar`, `TextField`, `NumberField`, `Stat`, `Panel`, `Hero`) and `AirTransfer`.
+- Layout: generous spacing, editorial hero (open, not boxed), bento grids for figures, `.rise` for scroll-driven entrances.
+- Animations in CSS (`transform` / `opacity`); DSP rendering in Canvas 2D through `requestAnimationFrame`, never React state per sample.
+- UI sounds come from `ui-sfx` only, are off by default and are silenced while the modem or the microphone runs.
+- UI language is English. Micro-copy stays restrained ("Summon the full demo", "Curse 1 bit", "Cryptographic seal intact", "Corrupted spirit rejected").

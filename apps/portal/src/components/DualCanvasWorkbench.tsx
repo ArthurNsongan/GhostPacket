@@ -478,7 +478,7 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
         />
 
         <ChannelControls settings={settings} onChange={setSettings} conduitRef={conduit} fates={fates} busy={busy} acousticProgress={acousticProgress}>
-          <div className="rounded-lg border border-ion/40 bg-ion/5 p-3">
+          <div className="rounded-lg bg-ion/5 p-3">
             <div className="flex items-baseline justify-between">
               <span className="text-[11px] uppercase tracking-widest text-ion">Chimera dual-channel race</span>
               <span className="font-mono text-[10px] text-mute">sound ∥ light</span>
@@ -502,7 +502,7 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
                 type="button"
                 onClick={() => setSabotage({ ...sabotageRef.current, jamAudio: true })}
                 disabled={!racing || sabotage.jamAudio || lanes.sound.status !== "running"}
-                className="rounded-md border border-alarm/60 px-2 py-2 text-[11px] text-alarm hover:bg-alarm/10 disabled:opacity-40"
+                className="rounded-md bg-alarm/10 px-2 py-2 text-[11px] text-alarm hover:bg-alarm/20 disabled:opacity-40"
               >
                 Jam audio −25 dB
               </button>
@@ -510,7 +510,7 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
                 type="button"
                 onClick={() => setSabotage({ ...sabotageRef.current, blockCamera: true })}
                 disabled={!racing || sabotage.blockCamera || lanes.light.status !== "running"}
-                className="rounded-md border border-alarm/60 px-2 py-2 text-[11px] text-alarm hover:bg-alarm/10 disabled:opacity-40"
+                className="rounded-md bg-alarm/10 px-2 py-2 text-[11px] text-alarm hover:bg-alarm/20 disabled:opacity-40"
               >
                 Block camera {BLOCKED_CAMERA_LOSS} %
               </button>
@@ -530,7 +530,7 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
             <SpectrogramCanvas core={core} ref={spectro} syncLocked={syncLocked} caption="FFT 1024 · Hann · WASM" />
             <p className="mt-1 h-4 font-mono text-[11px] text-mute">{acousticInfo}</p>
           </div>
-          <div className="rounded-lg border border-grid bg-void/40 p-3">
+          <div className="rounded-xl bg-ink/[0.035] p-3">
             <div className="mb-2 flex items-baseline justify-between">
               <span className="text-[11px] uppercase tracking-widest text-mute">LT fountain decoder</span>
               <span className="font-mono text-[10px] text-mute">peeling + Gauss GF(2)</span>

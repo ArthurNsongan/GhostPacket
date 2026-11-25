@@ -21,10 +21,10 @@ export default function ClinicShell({ children }: { children: React.ReactNode })
       )}
       nav={
         <>
-          <a href={`${PORTAL}/`} className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm text-mist hover:text-ink">
+          <a href={`${PORTAL}/`} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13.5px] text-mist transition-colors hover:bg-ink/[0.04] hover:text-ink">
             ← GhostPacket portal
           </a>
-          <a href={`${PORTAL}/tontine/`} className="whitespace-nowrap rounded-full px-3 py-1.5 text-sm text-mist hover:text-ink">
+          <a href={`${PORTAL}/tontine/`} className="whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13.5px] text-mist transition-colors hover:bg-ink/[0.04] hover:text-ink">
             GhostTontine ↗
           </a>
         </>

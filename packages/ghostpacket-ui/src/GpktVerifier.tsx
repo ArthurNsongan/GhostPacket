@@ -65,14 +65,14 @@ export default function GpktVerifier({ ghost }: { ghost: GhostState }) {
         className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition ${over ? "border-phosphor bg-phosphor/5" : "border-grid hover:border-phosphor/50"}`}
       >
         <span className="display text-2xl text-ink">
-          Drop a <em className="text-phosphor">.gpkt</em> file
+          Drop a <em className="text-accent">.gpkt</em> file
         </span>
         <span className="mt-1 text-sm text-mist">or click to choose one. Verified locally in WASM; nothing is uploaded.</span>
         <input type="file" accept=".gpkt,application/vnd.ghostpacket,application/octet-stream" className="sr-only" onChange={(e) => void load(e.target.files?.[0])} />
         {name && <span className="mt-2 font-mono text-[11px] text-ion">{name}</span>}
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={sample} className="rounded-md border border-grid px-3 py-1.5 text-[12px] text-mist hover:text-ink">
+        <button type="button" onClick={sample} className="rounded-md bg-ink/[0.06] transition-colors hover:bg-ink/[0.1] px-3 py-1.5 text-[12px] text-mist hover:text-ink">
           Generate a sample frame
         </button>
         <input
@@ -81,7 +81,7 @@ export default function GpktVerifier({ ghost }: { ghost: GhostState }) {
           autoComplete="off"
           spellCheck={false}
           placeholder="passphrase (encrypted frames)"
-          className="min-w-0 flex-1 rounded-md border border-grid bg-void px-2 py-1.5 font-mono text-[12px] text-ink outline-none"
+          className="min-w-0 flex-1 rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:bg-ink/[0.08]"
         />
         <button type="button" disabled={!frame} onClick={() => frame && check(frame)} className="rounded-md border border-ion/50 px-3 py-1.5 text-[12px] text-ion disabled:opacity-40">
           Re-verify

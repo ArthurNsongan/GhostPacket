@@ -24,7 +24,7 @@ export default function TamperLab({
   disabled: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-alarm/40 bg-alarm/5 p-3">
+    <div className="rounded-lg bg-alarm/5 p-3">
       <span className="text-[11px] uppercase tracking-widest text-alarm/80">Tamper lab (US-03)</span>
       <p className="mt-1 text-[12px] text-mist">Attack the frame, or click any byte in the inspector below to curse it. Each layer shows whether it held.</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -44,7 +44,7 @@ export default function TamperLab({
           type="button"
           onClick={onRestore}
           disabled={disabled || !last}
-          className="rounded-md border border-phosphor/40 px-2 py-2 text-[12px] text-phosphor hover:bg-phosphor/10 disabled:opacity-40"
+          className="rounded-md bg-phosphor/10 px-2 py-2 text-[12px] text-phosphor hover:bg-phosphor/20 disabled:opacity-40"
         >
           Restore intact frame
         </button>

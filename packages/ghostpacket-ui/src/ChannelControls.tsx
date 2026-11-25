@@ -42,7 +42,7 @@ export default function ChannelControls({
         </div>
       </div>
 
-      <div className="rounded-lg border border-grid bg-void/40 p-3">
+      <div className="rounded-xl bg-ink/[0.035] p-3">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-widest text-mute">Channel A · acoustic air</span>
           <span className="font-mono text-[10px] text-mute">{Math.round(acousticProgress * 100)} %</span>
@@ -82,7 +82,7 @@ export default function ChannelControls({
         </label>
       </div>
 
-      <div className="rounded-lg border border-grid bg-void/40 p-3">
+      <div className="rounded-xl bg-ink/[0.035] p-3">
         <span className="text-[11px] uppercase tracking-widest text-mute">Channel B · optical stream</span>
         <label className="mt-2 block">
           <div className="flex justify-between text-[12px]">

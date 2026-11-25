@@ -80,12 +80,12 @@ export default function FrameInspector({
       </div>
 
       {inspection.errorMessage && (
-        <p className="mt-2 rounded-md border border-alarm/50 bg-alarm/10 px-3 py-2 font-mono text-xs text-alarm">
+        <p className="mt-2 rounded-md bg-alarm/10 px-3 py-2 font-mono text-xs text-alarm">
           {inspection.errorCode} — {inspection.errorMessage}
         </p>
       )}
 
-      <div className="mt-3 max-h-56 overflow-auto rounded-lg border border-grid bg-void/70 p-3">
+      <div className="mt-3 max-h-56 overflow-auto rounded-xl bg-ink/[0.035] p-3">
         <div className="grid grid-cols-[repeat(16,minmax(0,1fr))] gap-x-1 gap-y-0.5 font-mono text-[11px] leading-5 sm:grid-cols-[repeat(32,minmax(0,1fr))]">
           {Array.from(frame, (b, i) => {
             const f = owner[i];
@@ -93,12 +93,12 @@ export default function FrameInspector({
             const isFlip = flipped?.byte === i;
             const dim = hover && f?.name !== hover;
             const cls = `rounded-sm text-center ${
-              isFlip ? "bg-alarm font-bold text-void ring-1 ring-alarm" : `${s.text} ${s.bg} ${dim ? "opacity-25" : ""}`
+              isFlip ? "bg-alarm font-bold text-void" : `${s.text} ${s.bg} ${dim ? "opacity-25" : ""}`
             } ${f?.valid === false && !isFlip ? "underline decoration-alarm" : ""}`;
             const label = `#${i} · ${f?.name ?? "?"} · 0x${b.toString(16).padStart(2, "0")}`;
             const hex = b.toString(16).padStart(2, "0").toUpperCase();
             return onCurseByte ? (
-              <button key={i} type="button" title={`${label} · click to curse`} onClick={() => onCurseByte(i)} className={`${cls} cursor-crosshair hover:ring-1 hover:ring-alarm`}>
+              <button key={i} type="button" title={`${label} · click to curse`} onClick={() => onCurseByte(i)} className={`${cls} cursor-crosshair hover:bg-alarm/30`}>
                 {hex}
               </button>
             ) : (

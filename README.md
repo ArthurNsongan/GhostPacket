@@ -53,11 +53,11 @@ The skeleton is `crates/ghostpacket-core` + `packages/ghostpacket-sdk` + `packag
 
 **Redemption rule.** A valid signature alone never releases medicine or money: anyone can sign a voucher with a fresh key. The pharmacy and the pay-out desk require the expected document type, no DEMO flag, a pinned issuer (fingerprint checked with the issuer), a plausible timestamp and an unexpired voucher. They then record the redemption in an append-only ledger that fails closed when storage is full.
 
-**Redesign ("Gothic Lantern & Ectoplasm").** Haunted Mode (default) has:
+**Redesign ("Midnight Atelier").** Haunted Mode (default) is classy first, spooky second:
+- Fraunces titles with a soft "wonky" italic accent, Geist for the interface, Geist Mono for telemetry (all self-hosted);
+- one warm candlelight accent per app; mist green only for "verified", garnet only for errors;
 - fine-line audio-reactive emblems (lantern, plague-doctor mask, wax seal);
-- spectral bats that carry transmissions and burst into embers on lost QR frames;
-- a moon that eclipses crimson with a lightning flash on rejection;
-- cobwebbed panels and Cinzel Decorative wordmarks;
+- a pale moon and a candle glow at rest; a bat swarm only while a frame is in the air; a blood moon on rejection;
 - synthesized cues (theremin, clock bell, organ fifth, tritone with thunder, funeral bell) and an optional crypt drone.
 
 Every sound is off by default and silenced instantly while the real modem plays or listens. **Clean Field Mode** removes the decoration for real clinics and markets.

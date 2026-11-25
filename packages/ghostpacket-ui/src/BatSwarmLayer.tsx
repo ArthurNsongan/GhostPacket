@@ -1,7 +1,7 @@
 "use client";
 
-// Spectral bats (HALLOWEEN_REDESIGN_PLAN.md §3.2): a few silhouettes drift across
-// the moonlit background; a transmission sends a swarm from left to right; a lost
+// Spectral bats (HALLOWEEN_REDESIGN_PLAN.md, V4): no resident silhouettes; a
+// transmission sends a small swarm from left to right; a lost
 // droplet turns one bat into ember sparks; a rejection scatters the swarm.
 // Canvas 2D, pointer-events: none, behind the panels. Haunted Mode only; stops
 // under prefers-reduced-motion and while the tab is hidden.
@@ -9,6 +9,8 @@ import { useEffect, useRef } from "react";
 
 import { onSpectral } from "ghostpacket-sdk/effects";
 import { hauntedMotion, onThemeChange } from "ghostpacket-sdk/theme";
+
+import { PAL, rgba, watchPalette } from "./palette";
 
 interface Bat {
   x: number;
@@ -29,7 +31,8 @@ interface Spark {
   life: number;
 }
 
-const AMBIENT = 6;
+// No resident bats: the swarm only appears when something happens (transmit, drop, rejection).
+const AMBIENT = 0;
 const MAX_BATS = 40;
 
 function rand(a: number, b: number) {
@@ -93,9 +96,16 @@ export default function BatSwarmLayer() {
       for (let i = 0; i < AMBIENT; i++) bats.push(ambient());
     };
 
+    let dirty = true;
     const frame = () => {
+      // Idle sky: nothing to draw, keep the canvas untouched until the next event.
+      if (bats.length === 0 && sparks.length === 0 && !dirty) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      dirty = bats.length > 0 || sparks.length > 0;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(196, 182, 232, 0.28)";
+      ctx.fillStyle = rgba(PAL.ion, 0.3);
       for (let i = bats.length - 1; i >= 0; i--) {
         const b = bats[i];
         if (!b) continue;
@@ -124,7 +134,7 @@ export default function BatSwarmLayer() {
           sparks.splice(i, 1);
           continue;
         }
-        ctx.fillStyle = `rgba(255, ${Math.round(120 + 80 * s.life)}, 40, ${s.life})`;
+        ctx.fillStyle = rgba(PAL.accent, s.life);
         ctx.fillRect(s.x, s.y, 2, 2);
       }
       raf = requestAnimationFrame(frame);
@@ -142,6 +152,7 @@ export default function BatSwarmLayer() {
     };
     const sync = () => (hauntedMotion() && !document.hidden ? start() : stop());
 
+    watchPalette();
     resize();
     seed();
     sync();
@@ -150,7 +161,7 @@ export default function BatSwarmLayer() {
     const offSpectral = onSpectral((e) => {
       if (!running()) return;
       if (e === "transmit") {
-        for (let i = 0; i < 12 && bats.length < MAX_BATS; i++) {
+        for (let i = 0; i < 9 && bats.length < MAX_BATS; i++) {
           bats.push({ x: rand(-80, -10), y: h * 0.45 + rand(-90, 90), vx: rand(3.5, 6), vy: rand(-0.6, 0.6), size: rand(6, 11), phase: rand(0, 6), flap: rand(0.4, 0.55), ttl: 600 });
         }
       } else if (e === "drop") {

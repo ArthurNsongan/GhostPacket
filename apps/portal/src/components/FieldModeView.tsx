@@ -283,7 +283,7 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                 stopAll();
                 setRole(r);
               }}
-              className={`rounded-md px-4 py-2 text-sm ${role === r ? "bg-phosphor/15 text-phosphor ring-1 ring-phosphor/40" : "text-mute"}`}
+              className={`rounded-md px-4 py-2 text-sm ${role === r ? "bg-ink/[0.08] text-ink font-medium" : "text-mute"}`}
             >
               {r === "emitter" ? "This device sends" : "This device receives"}
             </button>
@@ -291,7 +291,7 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
         </div>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-mute">Modem</span>
-          <select value={mode} onChange={(e) => setMode(e.target.value as FskMode)} className="rounded-md border border-grid bg-void px-2 py-1 font-mono text-xs" disabled={active !== null}>
+          <select value={mode} onChange={(e) => setMode(e.target.value as FskMode)} className="rounded-md bg-panel-2 px-2 py-1 font-mono text-xs" disabled={active !== null}>
             <option value="robust">robust · 15 ms/symbol</option>
             <option value="fast">fast · 6 ms/symbol</option>
           </select>
@@ -310,14 +310,14 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                   type="button"
                   disabled={active !== null}
                   onClick={() => setSource(p.id)}
-                  className={`rounded-md px-2 py-1.5 text-[12px] ${p.id === source ? "bg-phosphor/15 text-phosphor ring-1 ring-phosphor/40" : "text-mute"}`}
+                  className={`rounded-md px-2 py-1.5 text-[12px] ${p.id === source ? "bg-ink/[0.08] text-ink font-medium" : "text-mute"}`}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
             {source === "message" && (
-              <div className="rounded-lg border border-grid bg-void/40 p-3">
+              <div className="rounded-xl bg-ink/[0.035] p-3">
                 <MessageComposer value={message} onChange={setMessage} limits={core.limits} disabled={active !== null} />
                 <button type="button" onClick={() => setDocId(newDocId())} className="mt-2 font-mono text-[10px] text-mist hover:text-ink">
                   new document id ({String.fromCharCode(...docId)})
@@ -337,11 +337,11 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                 type="button"
                 onClick={active === "sound" ? stopAll : emitSound}
                 disabled={!encoded?.ok || (active !== null && active !== "sound")}
-                className="rounded-lg border border-phosphor/50 px-3 py-3 text-sm text-phosphor hover:bg-phosphor/10 disabled:opacity-40"
+                className="rounded-lg bg-phosphor/10 px-3 py-3 text-sm text-phosphor hover:bg-phosphor/20 disabled:opacity-40"
               >
                 {active === "sound" ? "Stop sound" : "Send over the speaker"}
               </button>
-              <button type="button" onClick={emitQr} disabled={!encoded?.ok || active !== null} className="rounded-lg border border-ion/50 px-3 py-3 text-sm text-ion hover:bg-ion/10 disabled:opacity-40">
+              <button type="button" onClick={emitQr} disabled={!encoded?.ok || active !== null} className="rounded-lg bg-ion/10 px-3 py-3 text-sm text-ion hover:bg-ion/20 disabled:opacity-40">
                 Show the full-screen QR stream
               </button>
             </div>
@@ -360,7 +360,7 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                 type="button"
                 onClick={active === "mic" ? stopAll : listen}
                 disabled={active !== null && active !== "mic"}
-                className="rounded-lg border border-phosphor/50 px-3 py-3 text-sm text-phosphor hover:bg-phosphor/10 disabled:opacity-40"
+                className="rounded-lg bg-phosphor/10 px-3 py-3 text-sm text-phosphor hover:bg-phosphor/20 disabled:opacity-40"
               >
                 {active === "mic" ? "Stop listening" : "Listen (microphone)"}
               </button>
@@ -368,7 +368,7 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                 type="button"
                 onClick={active === "camera" ? stopAll : () => void startCamera("camera")}
                 disabled={active !== null && active !== "camera"}
-                className="rounded-lg border border-ion/50 px-3 py-3 text-sm text-ion hover:bg-ion/10 disabled:opacity-40"
+                className="rounded-lg bg-ion/10 px-3 py-3 text-sm text-ion hover:bg-ion/20 disabled:opacity-40"
               >
                 {active === "camera" ? "Stop camera" : "Scan the screen (camera)"}
               </button>
@@ -380,7 +380,7 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
                 onChange={(e) => setPassphrase(e.target.value)}
                 autoComplete="off"
                 spellCheck={false}
-                className="mt-1 w-full rounded-md border border-grid bg-void px-2 py-1.5 font-mono text-sm text-ink outline-none focus:border-ion/60"
+                className="mt-1 w-full rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-sm text-ink outline-none focus:bg-ink/[0.08]"
               />
             </label>
             <SpectrogramCanvas core={core} ref={spectro} syncLocked={micStatus === "sync" || micStatus === "decoded"} caption="microphone" />

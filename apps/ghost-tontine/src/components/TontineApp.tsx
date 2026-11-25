@@ -245,7 +245,7 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
                         PAID · {paid.docId}
                       </button>
                     ) : (
-                      <button type="button" onClick={() => recordContribution(m)} className="rounded-md px-2 py-1 text-[12px] text-accent ring-1 ring-accent hover:bg-accent-soft">
+                      <button type="button" onClick={() => recordContribution(m)} className="btn-accent px-3 py-1 text-[12px]">
                         Record contribution
                       </button>
                     )}
@@ -274,7 +274,7 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
           <Panel title="One-time aid voucher · solidarity fund">
             <label className="block text-[12px] text-mist">
               Member
-              <select value={vMember || roster[0]?.id || ""} onChange={(e) => setVMember(e.target.value)} className="mt-1 w-full rounded-md border border-grid bg-void px-2 py-1.5 text-sm text-ink">
+              <select value={vMember || roster[0]?.id || ""} onChange={(e) => setVMember(e.target.value)} className="mt-1 w-full rounded-md bg-panel-2 px-2 py-1.5 text-sm text-ink">
                 {roster.map((m) => (
                   <option key={m.id} value={m.id}>
                     #{m.number} {m.name}
@@ -284,7 +284,7 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
             </label>
             <NumberField label="Amount" value={vAmount} min={500} max={1_000_000} step={500} onChange={setVAmount} suffix={g.currency} />
             <TextField label="Reason" value={vReason} max={NOTE} onChange={setVReason} />
-            <button type="button" onClick={issueVoucher} disabled={!roster.length || new TextEncoder().encode(vReason).length > NOTE} className="rounded-lg bg-accent-soft px-4 py-2.5 text-sm font-semibold text-accent ring-1 ring-accent disabled:opacity-40">
+            <button type="button" onClick={issueVoucher} disabled={!roster.length || new TextEncoder().encode(vReason).length > NOTE} className="btn-accent px-5 py-2.5 text-sm">
               Sign the voucher (valid 14 days, single use)
             </button>
             <ul className="max-h-40 overflow-y-auto border-t border-grid pt-2 font-mono text-[11px] text-mist">
@@ -328,12 +328,12 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
           <Panel title="Verdict">
             <ResultCard key={received?.seq ?? 0} verification={received?.v ?? null} channel={received ? (received.channel === "sound" ? "microphone" : "camera") : "microphone or camera"} replay={received?.check} />
             {received?.v.ok && gate && !gate.ok && <IssuerGate gate={gate} verified={received.v.value} label={gateLabel} onPinned={() => receive(received.frame, received.channel)} />}
-            {received?.refused && <p className="rounded-lg border border-alarm/60 bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
+            {received?.refused && <p className="rounded-lg bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
             {isVoucher && gate?.ok && (
               <button
                 type="button"
                 onClick={redeemVoucher}
-                className={`rounded-lg px-4 py-2.5 text-sm font-semibold ring-1 disabled:opacity-40 ${received?.check?.status === "replay" ? "bg-alarm/15 text-alarm ring-alarm/50" : "bg-accent-soft text-accent ring-accent"}`}
+                className={`rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-40 ${received?.check?.status === "replay" ? "bg-alarm/15 text-alarm" : "bg-accent-soft text-accent"}`}
               >
                 {received?.check?.status === "replay"
                   ? `Already redeemed ${new Date(received.check.entry.firstSeen).toLocaleString()}: refuse`
@@ -357,7 +357,7 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
 
 function ModeSelect({ mode, onChange }: { mode: FskMode; onChange: (m: FskMode) => void }) {
   return (
-    <select value={mode} onChange={(e) => onChange(e.target.value as FskMode)} className="rounded-md border border-grid bg-void px-2 py-1 font-mono text-[11px]" aria-label="Modem mode">
+    <select value={mode} onChange={(e) => onChange(e.target.value as FskMode)} className="rounded-md bg-panel-2 px-2 py-1 font-mono text-[11px]" aria-label="Modem mode">
       <option value="robust">sound: robust</option>
       <option value="fast">sound: fast</option>
     </select>
@@ -381,7 +381,7 @@ function NewMember({ next }: { next: number }) {
         <TextField label="Phone (stays on this device)" value={phone} onChange={setPhone} />
         <NumberField label="Share per round" value={share} min={500} max={1_000_000} step={500} onChange={setShare} suffix="XOF" />
       </div>
-      <button type="button" onClick={add} disabled={!name.trim()} className="rounded-lg px-3 py-2 text-sm text-accent ring-1 ring-accent hover:bg-accent-soft disabled:opacity-40">
+      <button type="button" onClick={add} disabled={!name.trim()} className="btn-accent px-4 py-2 text-sm">
         Add member #{next}
       </button>
     </Panel>

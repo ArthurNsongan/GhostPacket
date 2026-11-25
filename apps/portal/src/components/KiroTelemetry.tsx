@@ -49,7 +49,7 @@ export default function KiroTelemetry({ ghost, onClose }: { ghost: GhostState | 
       <aside className="panel h-full w-full max-w-md overflow-y-auto rounded-none p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between">
           <h2 className="display text-2xl text-ink">
-            Kiro <em className="text-phosphor">Telemetry</em>
+            Kiro <em className="text-accent">Telemetry</em>
           </h2>
           <button type="button" onClick={onClose} className="font-mono text-xs text-mist hover:text-ink">
             close ✕

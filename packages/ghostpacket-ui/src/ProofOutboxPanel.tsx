@@ -100,7 +100,7 @@ export default function ProofOutboxPanel({ ghost }: { ghost: GhostState }) {
           placeholder="https://verifier.example.org  or  http://127.0.0.1:8787"
           aria-label="Verifier URL"
           spellCheck={false}
-          className="min-w-0 flex-1 rounded-md border border-grid bg-void px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-phosphor/60"
+          className="min-w-0 flex-1 rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:bg-ink/[0.08]"
         />
         <input
           value={token}
@@ -109,7 +109,7 @@ export default function ProofOutboxPanel({ ghost }: { ghost: GhostState }) {
           placeholder="token (optional)"
           aria-label="Verifier token"
           autoComplete="off"
-          className="w-36 rounded-md border border-grid bg-void px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-phosphor/60"
+          className="w-36 rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:bg-ink/[0.08]"
         />
         <button type="button" onClick={syncNow} disabled={busy || !norm?.ok || pending === 0} className="rounded-md bg-phosphor/90 px-3 py-1.5 text-[12px] font-semibold text-void hover:bg-phosphor disabled:opacity-40">
           {busy ? "Syncing…" : `Sync now (${pending})`}
@@ -131,7 +131,7 @@ export default function ProofOutboxPanel({ ghost }: { ghost: GhostState }) {
       ) : (
         <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto">
           {items.map((i) => (
-            <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-grid bg-void/50 px-2 py-1 font-mono text-[11px]">
+            <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink/[0.035] px-2 py-1 font-mono text-[11px]">
               <span className="text-ink">
                 {i.docId} · <span className="text-ion">{i.fingerprint}</span> · via {i.channel}
                 {i.encrypted ? " · E2EE" : ""}

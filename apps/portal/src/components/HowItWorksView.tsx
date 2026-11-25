@@ -128,7 +128,7 @@ function Snippets() {
     <div>
       <div className="flex flex-wrap gap-1" role="tablist">
         {Object.keys(SNIPPETS).map((k) => (
-          <button key={k} role="tab" aria-selected={k === tab} onClick={() => setTab(k)} className={`rounded-full px-3 py-1 text-[12px] ${k === tab ? "bg-ion/15 text-ion ring-1 ring-ion/40" : "text-mist hover:text-ink"}`}>
+          <button key={k} role="tab" aria-selected={k === tab} onClick={() => setTab(k)} className={`rounded-full px-3 py-1 text-[12px] ${k === tab ? "bg-ion/15 text-ion font-medium" : "text-mist hover:text-ink"}`}>
             {k}
           </button>
         ))}
@@ -145,7 +145,7 @@ function Snippets() {
         >
           {copied ? "copied ✓" : "copy"}
         </button>
-        <pre className="max-h-96 overflow-auto rounded-lg border border-grid bg-void/80 p-4 font-mono text-[12px] leading-relaxed text-ink">{s?.code}</pre>
+        <pre className="max-h-96 overflow-auto rounded-xl bg-ink/[0.035] p-4 font-mono text-[12px] leading-relaxed text-ink">{s?.code}</pre>
       </div>
     </div>
   );
@@ -157,15 +157,15 @@ export default function HowItWorksView() {
       <section className="panel p-6">
         <p className="panel-title">How it works</p>
         <h1 className="display mt-2 text-[clamp(2rem,4vw,3.2rem)] leading-tight text-ink">
-          From plaintext to <em className="text-phosphor glow">verified plaintext</em>, through the air.
+          From plaintext to <em className="text-accent">verified plaintext</em>, through the air.
         </h1>
         <ol className="mt-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="End-to-end pipeline">
           {PIPELINE.map((p, i) => (
-            <li key={p.name} className="pipeline-step relative rounded-lg border border-grid bg-void/50 p-3" style={{ animationDelay: `${i * 0.45}s` }}>
+            <li key={p.name} className="pipeline-step relative rounded-xl bg-ink/[0.035] p-3.5" style={{ animationDelay: `${i * 0.45}s` }}>
               <span className="font-mono text-[10px] text-mute">0{i + 1}</span>
               <p className={`mt-1 font-semibold ${p.tone}`}>{p.name}</p>
               <p className="mt-1 text-[12px] text-mist">{p.detail}</p>
-              {i < PIPELINE.length - 1 && <span className="absolute -right-2 top-1/2 hidden -translate-y-1/2 text-phosphor xl:block">›</span>}
+              {i < PIPELINE.length - 1 && <span className="absolute -right-2 top-1/2 hidden -translate-y-1/2 text-mute xl:block">›</span>}
             </li>
           ))}
         </ol>
@@ -210,7 +210,7 @@ export default function HowItWorksView() {
 
       <section id="sdk" className="panel p-6" aria-labelledby="sdk-title">
         <h2 id="sdk-title" className="display text-3xl text-ink">
-          Integrate in <em className="text-ion">your app</em>
+          Integrate in <em className="text-accent">your app</em>
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-mist">
           <span className="font-mono text-ink">GhostPacketSDK</span> (package <span className="font-mono">packages/ghostpacket-sdk</span>, shared by every app of the skeleton) exposes <span className="font-mono text-ink">sealMessage</span>,{" "}
@@ -249,7 +249,7 @@ export default function HowItWorksView() {
 
       <section className="panel p-6" aria-labelledby="verifier">
         <h2 id="verifier" className="display text-3xl text-ink">
-          Verify a <em className="text-phosphor">.gpkt</em> proof
+          Verify a <em className="text-accent">.gpkt</em> proof
         </h2>
         <div className="mt-4">
           <WithGhost>{(g) => <GpktVerifier ghost={g} />}</WithGhost>

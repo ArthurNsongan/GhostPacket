@@ -43,7 +43,7 @@ export default function CryptLedger({ scope, note }: { scope: LedgerScope; note?
       ) : (
         <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto">
           {entries.map((e) => (
-            <li key={e.key} className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-grid bg-void/50 px-2 py-1 font-mono text-[11px]">
+            <li key={e.key} className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg bg-ink/[0.035] px-2 py-1 font-mono text-[11px]">
               <span className="text-ink">
                 {e.docId} · <span className="text-mist">{e.title}</span>
               </span>
