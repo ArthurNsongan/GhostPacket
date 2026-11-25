@@ -28,9 +28,9 @@ const THREATS = [
 const SNIPPETS: Record<string, { lang: string; code: string }> = {
   "Vanilla JS / PWA": {
     lang: "ts",
-    code: `// Copy web/src/lib/ and web/src/wasm/ into your app, and serve
-// ghostpacket_core_bg.wasm from your own origin.
-import { GhostPacketSDK, downloadFile } from "./lib/sdk";
+    code: `// npm install ./sdk  (or the packed tarball: cd sdk && npm pack)
+// ESM package; the WASM and the microphone worklet ship inside it.
+import { GhostPacketSDK, downloadFile } from "ghostpacket-sdk";
 
 const gp = await GhostPacketSDK.load();          // ephemeral Ed25519 key for this tab
 console.log("My fingerprint:", gp.identity.fingerprint);
@@ -67,20 +67,33 @@ downloadFile(gp.exportGpktFile(sealed.value.frame, "rx-0815.gpkt"));`,
   },
   "Offline-to-cloud sync": {
     lang: "ts",
-    code: `// Field device: keep verified proofs while offline…
-const queue: string[] = JSON.parse(localStorage.getItem("gpkt-queue") ?? "[]");
-function keep(frame: Uint8Array) {
-  queue.push(btoa(String.fromCharCode(...frame)));
-  localStorage.setItem("gpkt-queue", JSON.stringify(queue));
-}
-// …and hand them to your backend when the network returns.
-window.addEventListener("online", async () => {
-  for (const b64 of queue.splice(0)) {
-    await fetch("/api/proofs", { method: "POST", body: b64 }); // your server
-  }
-  localStorage.setItem("gpkt-queue", "[]");
+    code: `// Field device, offline: verify, then queue the proof (stored locally, ciphertext if E2EE).
+const v = gp.verifyFrame(frame, { strictKeyring: true, ledger: "field", channel: "light" });
+if (v.ok) gp.queueProof(frame, v.value, "light");
+
+// Back online: upload to a ghostpacket-verifier. Nothing is sent until an endpoint is set.
+const stop = gp.enableAutoSync("https://verifier.example.org", (r) => {
+  console.log(r.synced, "synced,", r.replays, "double spend(s) caught server-side");
 });
-// Server: re-verify each proof with ghostpacket-core (Rust) before trusting it.`,
+// or on demand: const report = await gp.syncProofs("http://127.0.0.1:8787");
+// Item states: pending → synced (201) | replay (409, redeemed on another device) | rejected (422)`,
+  },
+  "Server verifier": {
+    lang: "sh",
+    code: `# Rust, std-only HTTP endpoint that re-verifies every proof with ghostpacket-core
+cargo build --release --manifest-path crates/ghostpacket-verifier/Cargo.toml
+./crates/ghostpacket-verifier/target/release/ghostpacket-verifier serve \\
+  --addr 0.0.0.0:8787 --ledger proofs.jsonl \\
+  --trust 2152F8D1…DB12 \\                         # strict keyring (or --tofu to accept any valid issuer)
+  --allow-origin https://arthurnsongan.github.io  # the one browser origin allowed to POST
+# Secrets only from the environment: GHOSTPACKET_PASSPHRASE (encrypted proofs), GHOSTPACKET_TOKEN (bearer)
+
+# POST /v1/proofs  Content-Type: application/octet-stream, body = raw .gpkt (≤ 512 B)
+#   201 {"status":"accepted","doc_id":"AID-5531","fingerprint":"GPKT-…",…}
+#   409 {"status":"replay","first_received_at":…}     ← double spend
+#   422 {"status":"rejected","code":"CRC32_MISMATCH",…}
+# Batch check of files:
+ghostpacket-verifier verify inbox/*.gpkt --trust 2152F8D1…DB12`,
   },
   "Rust (ghostpacket-core)": {
     lang: "rust",
@@ -200,10 +213,11 @@ export default function HowItWorksView() {
           Integrate in <em className="text-ion">your app</em>
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-mist">
-          <span className="font-mono text-ink">GhostPacketSDK</span> (<span className="font-mono">web/src/lib/sdk.ts</span>) exposes <span className="font-mono text-ink">sealMessage</span>,{" "}
+          <span className="font-mono text-ink">GhostPacketSDK</span> (package <span className="font-mono">sdk/</span>, built from <span className="font-mono">web/src/lib</span>) exposes <span className="font-mono text-ink">sealMessage</span>,{" "}
           <span className="font-mono text-ink">verifyFrame</span>, <span className="font-mono text-ink">transmitAcoustic</span> / <span className="font-mono text-ink">receiveAcoustic</span>,{" "}
-          <span className="font-mono text-ink">transmitOptical</span> / <span className="font-mono text-ink">receiveOptical</span> and <span className="font-mono text-ink">exportGpktFile</span> /{" "}
-          <span className="font-mono text-ink">importGpktFile</span>.
+          <span className="font-mono text-ink">transmitOptical</span> / <span className="font-mono text-ink">receiveOptical</span>, <span className="font-mono text-ink">exportGpktFile</span> /{" "}
+          <span className="font-mono text-ink">importGpktFile</span>, and <span className="font-mono text-ink">queueProof</span> / <span className="font-mono text-ink">syncProofs</span> /{" "}
+          <span className="font-mono text-ink">enableAutoSync</span> for the server-side verifier.
         </p>
         <div className="mt-4">
           <Snippets />

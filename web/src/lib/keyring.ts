@@ -2,6 +2,7 @@
 // `GPKT-KEY:<label>:<public key hex>`; the receiver pins it. In strict mode the
 // receiver passes the pinned keys to `decode_frame`, so any other issuer is
 // rejected with UNTRUSTED_ISSUER. Public keys only: nothing secret is stored.
+import { readJson, writeJson } from "./storage";
 import type { Core } from "./wasm-bridge";
 
 export interface TrustedKey {
@@ -42,21 +43,12 @@ export function parseIdentity(core: Core, text: string): ParsedIdentity {
 }
 
 export function readKeyring(): TrustedKey[] {
-  if (typeof localStorage === "undefined") return [];
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE) ?? "[]");
-    return Array.isArray(parsed) ? (parsed as TrustedKey[]).slice(0, MAX_KEYS) : [];
-  } catch {
-    return [];
-  }
+  const parsed = readJson<unknown>(STORAGE, []);
+  return Array.isArray(parsed) ? (parsed as TrustedKey[]).slice(0, MAX_KEYS) : [];
 }
 
 function write(keys: TrustedKey[]): void {
-  try {
-    localStorage.setItem(STORAGE, JSON.stringify(keys.slice(0, MAX_KEYS)));
-  } catch {
-    /* storage disabled: keyring lasts for this page view */
-  }
+  writeJson(STORAGE, keys.slice(0, MAX_KEYS));
   listeners.forEach((l) => l());
 }
 

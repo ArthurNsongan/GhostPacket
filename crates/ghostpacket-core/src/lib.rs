@@ -109,7 +109,7 @@ fn parse_public_key(hex: &str) -> Result<[u8; 32], GhostError> {
         .as_slice()
         .try_into()
         .map_err(|_| GhostError::InvalidPublicKey)?;
-    ed25519_dalek::VerifyingKey::from_bytes(&key).map_err(|_| GhostError::InvalidPublicKey)?;
+    crypto::validate_public_key(&key)?;
     Ok(key)
 }
 

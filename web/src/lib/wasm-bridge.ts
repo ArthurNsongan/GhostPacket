@@ -3,6 +3,7 @@
 // - Times every call so the UI can show the < 500 ms budget.
 // - Converts WASM errors `{ code, message }` into typed results.
 import init, * as wasm from "../wasm/ghostpacket_core.js";
+import { assets, configureAssets, type AssetConfig } from "./assets";
 import {
   FSK_MODE_CODE,
   isGhostError,
@@ -18,7 +19,6 @@ import {
   type VerifiedFrame,
 } from "./types";
 
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: GhostError };
 
@@ -82,11 +82,16 @@ function attempt<T>(op: string, fn: () => T): Result<T> {
 
 let loading: Promise<Core> | null = null;
 
-/** Loads the WASM core once. Safe to call from many components. */
-export function loadCore(): Promise<Core> {
+/**
+ * Loads the WASM core once. Safe to call from many components.
+ * `wasm` overrides the binary location (URL) or provides its bytes (Node, tests).
+ */
+export function loadCore(opts: { wasm?: AssetConfig["wasm"] } = {}): Promise<Core> {
+  if (opts.wasm !== undefined) configureAssets({ wasm: opts.wasm });
   loading ??= (async () => {
     const t0 = performance.now();
-    await init({ module_or_path: `${BASE_PATH}/wasm/ghostpacket_core_bg.wasm` });
+    const source = assets().wasm;
+    await init(source === undefined ? undefined : { module_or_path: source });
     const core = new Core();
     record({ op: "wasm_load", ms: performance.now() - t0, at: Date.now() });
     return core;

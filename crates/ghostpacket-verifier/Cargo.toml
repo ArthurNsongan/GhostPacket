@@ -1,0 +1,23 @@
+[package]
+name = "ghostpacket-verifier"
+version = "0.2.0"
+edition = "2021"
+description = "Server-side verifier for GhostPacket proofs: re-checks .gpkt frames with ghostpacket-core (CLI + minimal HTTP endpoint with a server-side anti-replay ledger)."
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "ghostpacket-verifier"
+path = "src/main.rs"
+
+[dependencies]
+ghostpacket-core = { path = "../ghostpacket-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Already in the dependency tree of ghostpacket-core.
+sha2 = "0.10"
+zeroize = "1"
+
+[profile.release]
+opt-level = 3
+lto = true

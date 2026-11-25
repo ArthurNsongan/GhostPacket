@@ -22,7 +22,8 @@ V2 features (`.kiro/specs/platform-v2/`):
 - **Anti-replay Crypt Ledger**: a receipt or voucher presented twice raises `REPLAY DETECTED · ALREADY REDEEMED`, even offline.
 - **Trusted keyring**: the sender shows an identity QR; in strict mode any other signer is rejected with `UNTRUSTED_ISSUER`.
 - **Offline**: a same-origin service worker; after one visit the site works in airplane mode (`OFFLINE · AIR-GAP ACTIVE`).
-- **SDK**: `GhostPacketSDK` (`web/src/lib/sdk.ts`) to embed sealing, transmission and verification in another offline app.
+- **SDK package** `ghostpacket-sdk` (`sdk/`): sealing, both transmitters, both receivers and verification for another app, with no bundler required ([below](#sdk-package)).
+- **Offline-to-cloud sync**: proofs verified offline wait in an outbox and are uploaded later to `ghostpacket-verifier`, a Rust server that re-verifies them and catches a voucher redeemed on two offline devices (`.kiro/specs/sdk-and-sync/`, [below](#server-verifier-and-offline-to-cloud-sync)).
 
 Target users: tontine treasurers, rural clinics and aid distributors in low-coverage areas. The three built-in presets are a **Dakar Tontine Receipt** (Tilène Market), a **Ndiob Rural Clinic Prescription** and a **Kaolack Flood Relief Voucher**.
 
@@ -59,8 +60,9 @@ QR codes in the loopback are actually rendered on a canvas and read back with `j
 | Clock drift and room echo | 100 % from −300 to +300 ppm with two reflections, at 12 dB SNR (symbol timing tracking) |
 | Field mode in Chrome (fake mic, fake camera) | microphone: verified after 26.3 s (350-byte frame, robust mode, 23.6 s burst); camera: 20/20 blocks from blurred QR codes in 3.6 s |
 | Fountain decoding | 100 % of 100 seeds at 30, 40 and 50 % loss, ~1.23 K droplets received on average |
-| Rust tests | 51 (protocol vectors incl. encryption, FSK fuzz, fountain fuzz, unit) |
-| Browser checks (headless Chrome, `/GhostPacket/` base path) | 26/26: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, offline reload, 0 console error, 0 external request, 0 404 |
+| Rust tests | 52 in the core (protocol vectors incl. encryption and weak keys, FSK fuzz, fountain fuzz, unit) + 12 in the server verifier (real TCP) |
+| SDK package tests | 8 in Node (incl. sync against the real verifier) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
+| Browser checks (headless Chrome, `/GhostPacket/` base path) | 30/30: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, outbox → verifier sync, offline reload, 0 console error, 0 external request, 0 404 |
 
 LZ4 is applied only when it shrinks the payload. On these short, varied texts `postcard` is already compact, so the encoder keeps the raw payload.
 
@@ -78,9 +80,11 @@ The full specification, with the verification order and every error code, is in 
 
 ```text
 crates/ghostpacket-core/   Rust → WASM: protocol, crypto, Reed-Solomon, FSK, fountain, channel simulator
+crates/ghostpacket-verifier/ native server verifier + anti-replay ledger (reuses ghostpacket-core)
 web/                       Next.js static export (UI, Web Audio, Canvas, camera)
+sdk/                       ghostpacket-sdk npm package, its tests and a plain-HTML example
 mcp-server/                MCP server ghostpacket-inspector (stdio)
-scripts/                   Node scripts called by the Kiro hooks
+scripts/                   Node scripts called by the Kiro hooks, SDK build, gh-pages deploy
 .kiro/                     steering, specs, hooks, MCP settings
 .github/workflows/         GitHub Pages deployment
 ```
@@ -92,7 +96,8 @@ All cryptography, compression, DSP and coding runs in the Rust crate. `web/` onl
 Requirements: Rust with `wasm32-unknown-unknown`, `wasm-pack`, and Node ≥ 23.6.
 
 ```powershell
-cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml   # 38 tests: vectors + fuzz
+cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml       # 52 tests: vectors + fuzz
+cargo test --release --manifest-path crates/ghostpacket-verifier/Cargo.toml   # 12 tests, real TCP
 npm --prefix web install
 npm --prefix web run wasm        # wasm-pack → web/src/wasm + web/public/wasm
 npm --prefix web run build       # static export in web/out
@@ -100,6 +105,57 @@ npx serve web/out                # or any static host
 ```
 
 The generated WASM glue is committed, so `npm run build` works without a Rust toolchain.
+
+## SDK package
+
+`sdk/` is the `ghostpacket-sdk` package: ES modules with type declarations, the `.wasm` and the capture worklet. It is built from `web/src/lib`, so the site and the package run the same code.
+
+```powershell
+node scripts/build-sdk.mjs          # → sdk/dist (also run by npm pack)
+npm --prefix sdk install
+npm --prefix sdk test               # Node: seal, verify, E2EE, ledger, keyring, sync
+npm --prefix sdk run test:browser   # headless Chrome: sound and light, both directions, fake mic + camera
+npm pack ./sdk                      # ghostpacket-sdk-0.2.0.tgz, then in your app: npm install ../ghostpacket-sdk-0.2.0.tgz
+```
+
+```js
+import { GhostPacketSDK } from "ghostpacket-sdk";
+
+const gp = await GhostPacketSDK.load();      // or load({ wasm, workletUrl, storage, seed })
+const sealed = gp.sealMessage({ sender: "Ndiob clinic", title: "Rx 0042", message: "Amoxicillin 500 mg" }, { passphrase: "baobab moon" });
+if (sealed.ok) await gp.transmitAcoustic(sealed.value.frame);   // or transmitOptical(frame, canvas, abortSignal)
+
+// Receiver: receiveAcoustic({ onFrame }) or receiveOptical(video, onFrame), then for each frame
+const v = gp.verifyFrame(frame, { passphrase: "baobab moon", strictKeyring: true });
+```
+
+In a page without a bundler, map `ghostpacket-sdk`, `jsqr` and `qrcode-generator` with an import map: see `sdk/examples/browser/index.html`. In Node, storage falls back to memory and the acoustic and optical I/O methods are not available; sealing, verification and sync work.
+
+## Server verifier and offline-to-cloud sync
+
+A field device verifies frames offline. Each verified frame also goes into a local **proof outbox** (Test page, or `gp.queueProof`). When the network returns, the outbox uploads the frames to `ghostpacket-verifier`, which runs the same Rust verification again and keeps its own anti-replay ledger. A voucher redeemed on two offline devices is accepted once (201) and reported as a double spend the second time (409).
+
+```powershell
+cargo build --release --manifest-path crates/ghostpacket-verifier/Cargo.toml
+$env:GHOSTPACKET_TOKEN = "…"   # optional bearer token; GHOSTPACKET_PASSPHRASE for encrypted proofs
+# --trust <issuer key hex> pins the issuers (strict keyring); --tofu accepts any valid signer instead
+crates/ghostpacket-verifier/target/release/ghostpacket-verifier serve `
+  --addr 127.0.0.1:8787 --ledger proofs.jsonl --trust <issuer key hex> `
+  --allow-origin https://arthurnsongan.github.io
+# Batch check of files; exit code 1 if any fails
+crates/ghostpacket-verifier/target/release/ghostpacket-verifier verify a.gpkt b.gpkt --trust <issuer key hex>
+```
+
+```js
+gp.queueProof(frame, v.value, "light");                       // stored locally, ciphertext if E2EE
+const report = await gp.syncProofs("https://verifier.example.org", { token });
+// pending → synced (201) | replay (409, double spend) | rejected (422); 5xx and network errors stay pending
+const stop = gp.enableAutoSync("https://verifier.example.org");  // sync each time the browser is back online
+```
+
+`POST /v1/proofs` takes the raw frame (`Content-Type: application/octet-stream`, ≤ 512 bytes). The server bounds every request (5 s deadline, 2 KiB of headers, one `Content-Length`, ≤ 32 connections and 4 per IP, rate limit), only answers CORS for the one `--allow-origin`, writes each redemption to disk before answering 201, and echoes no document field for encrypted proofs. The site sends nothing until a verifier URL is typed in; the URL must be `https://`, or `http://` on localhost. Chrome may ask for "local network access" when the https site posts to a verifier on `localhost`.
+
+Known limitation: whoever overhears a broadcast can upload it first, and the honest upload then shows as a replay. The token limits who can submit.
 
 ## Deploy
 
@@ -128,7 +184,7 @@ If the sound path fails, lower the speaker volume (clipping), move closer, or cu
 
 ## How we built GhostPacket with Kiro
 
-- **Specs** (`.kiro/specs/`): six specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
+- **Specs** (`.kiro/specs/`): seven specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`, `sdk-and-sync`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
 - **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `web/src/**` and carries the "Spectral Telemetry" visual system.
 - **Hooks** (`.kiro/hooks/`, v1 format):
   - `fuzz-noise-channel` runs the acoustic and optical fuzz suites whenever a codec file is saved.
@@ -152,7 +208,8 @@ An "air" test (clock drift between devices plus room echo) then showed the acous
 - The issuer's public key is inside the signed document. An optional keyring rejects unknown issuers with `UNTRUSTED_ISSUER`.
 - Optional end-to-end encryption (ChaCha20-Poly1305, PBKDF2-HMAC-SHA256 40 000 iterations, NFC passphrase, fresh 16-byte salt per frame). Derived keys and decrypted plaintext are zeroized in WASM. The ledger and keyring store public data only (ids, fingerprints, public keys), never message text.
 - Untrusted lengths are bounded before allocation: frame ≤ 512 bytes, decompressed size ≤ 4096 bytes (LZ4 bomb blocked), ≤ 256 pending droplets.
-- No network call at runtime: fonts are self-hosted and the WASM is served from the same origin.
+- No network call at runtime: fonts are self-hosted and the WASM is served from the same origin. The only exception is opt-in proof sync to a verifier URL you enter; the token stays in memory.
+- The server verifier was reviewed by `dsp-security-auditor`; its findings (whole-request deadline, strict HTTP parsing, origin check, connection and rate limits, weak keys accepted for pinning, decryption oracle, ledger durability) were fixed and are covered by `crates/ghostpacket-verifier/tests/verifier.rs`.
 
 ## Licence
 

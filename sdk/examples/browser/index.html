@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GhostPacket SDK — plain browser example</title>
+    <!-- No bundler: map the two bare dependencies to files. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "qrcode-generator": "../../node_modules/qrcode-generator/dist/qrcode.mjs",
+          "jsqr": "./jsqr-shim.js"
+        }
+      }
+    </script>
+    <style>
+      body { font: 14px system-ui, sans-serif; background: #07080b; color: #f3efe6; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+      button { margin: 0.2rem; padding: 0.4rem 0.8rem; }
+      input, textarea { width: 100%; box-sizing: border-box; margin: 0.2rem 0; }
+      pre { background: #0d0f14; padding: 0.6rem; white-space: pre-wrap; max-height: 16rem; overflow: auto; }
+      canvas, video { max-width: 220px; background: #e9fff3; image-rendering: pixelated; }
+    </style>
+  </head>
+  <body>
+    <h1>GhostPacket SDK</h1>
+    <p>Plain HTML + ES modules, no framework. Microphone and camera need HTTPS or localhost.</p>
+    <label>Message <textarea id="msg">Your prescription is signed. Show this at the pharmacy.</textarea></label>
+    <label>Passphrase (optional) <input id="pass" autocomplete="off" /></label>
+    <label>Verifier URL (optional, for sync) <input id="endpoint" placeholder="http://127.0.0.1:8787" /></label>
+    <div>
+      <button id="send-sound">Send over sound</button>
+      <button id="send-qr">Show QR stream (10 s)</button>
+      <button id="listen">Listen (microphone)</button>
+      <button id="scan">Scan (camera)</button>
+      <button id="sync">Sync proofs</button>
+    </div>
+    <canvas id="qr" width="148" height="148"></canvas>
+    <video id="cam" muted playsinline></video>
+    <pre id="log"></pre>
+
+    <script type="module">
+      import { GhostPacketSDK } from "../../dist/lib/index.js";
+
+      const $ = (id) => document.getElementById(id);
+      const log = (...a) => {
+        $("log").textContent = `${a.join(" ")}\n` + $("log").textContent;
+      };
+      const gp = await GhostPacketSDK.load();
+      log(`ready · my fingerprint ${gp.identity.fingerprint}`);
+
+      const seal = () => {
+        const r = gp.sealMessage({ sender: "SDK example", title: "Note", message: $("msg").value }, { passphrase: $("pass").value || undefined });
+        if (!r.ok) throw new Error(`${r.error.code}: ${r.error.message}`);
+        return r.value.frame;
+      };
+      const receive = (frame, channel) => {
+        const v = gp.verifyFrame(frame, { passphrase: $("pass").value || undefined, ledger: "field", channel });
+        if (!v.ok) return log(`REJECTED ${v.error.code} via ${channel}`);
+        const body = v.value.document.body;
+        gp.queueProof(frame, v.value, channel);
+        log(`VERIFIED via ${channel} · ${v.value.fingerprint}${v.value.replay?.status === "replay" ? " · REPLAY" : ""} · ${"customMessage" in body ? body.customMessage.message : "document"}`);
+        return v.value;
+      };
+
+      // Exposed for tests and for the console.
+      window.gp = gp;
+      window.demo = {
+        seal,
+        receive,
+        sendSound: (mode = "fast") => gp.transmitAcoustic(seal(), { mode, volume: 0.3 }),
+        sendQr: (ms = 10000) => {
+          const ctrl = new AbortController();
+          setTimeout(() => ctrl.abort(), ms);
+          return gp.transmitOptical(seal(), $("qr"), ctrl.signal, 10).catch(() => undefined);
+        },
+        listen: (mode = "robust") =>
+          new Promise(async (resolve) => {
+            const rx = await gp.receiveAcoustic({ mode, onFrame: (f) => resolve({ rx, v: receive(f, "sound") }) });
+            window.demo.mic = rx;
+          }),
+        scan: () =>
+          new Promise(async (resolve) => {
+            const sc = await gp.receiveOptical($("cam"), (f) => resolve({ sc, v: receive(f, "light") }));
+            window.demo.cam = sc;
+          }),
+        sync: (endpoint = $("endpoint").value) => gp.syncProofs(endpoint),
+      };
+
+      $("send-sound").onclick = () => demo.sendSound("robust").then(() => log("burst sent"));
+      $("send-qr").onclick = () => demo.sendQr();
+      $("listen").onclick = () => demo.listen().then(({ rx }) => rx.stop());
+      $("scan").onclick = () => demo.scan().then(({ sc }) => sc.stop());
+      $("sync").onclick = async () => log(`sync: ${JSON.stringify(await demo.sync())}`);
+    </script>
+  </body>
+</html>

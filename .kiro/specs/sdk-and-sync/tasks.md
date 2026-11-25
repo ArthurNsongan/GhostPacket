@@ -1,0 +1,29 @@
+# Implementation plan — SDK and offline-to-cloud sync
+
+- [x] 1. Make the SDK portable
+  - [x] 1.1 `assets.ts` (asset URLs) and `storage.ts` (localStorage or memory, `setStorage`)
+  - [x] 1.2 Ledger, keyring, outbox and UI sounds on `storage.ts`
+  - [x] 1.3 `GhostPacketSDK.load({ seed, wasm, workletUrl, storage })`, `receiveOptical` with deduplication
+  - _Requirements: 1.2, 1.3, 1.6_
+- [x] 2. Package `ghostpacket-sdk`
+  - [x] 2.1 `web/src/lib/index.ts` entry, `web/tsconfig.sdk.json`, `scripts/build-sdk.mjs`
+  - [x] 2.2 `sdk/package.json` with `exports` for the `.wasm` and worklet; `sdk/dist/` git-ignored
+  - [x] 2.3 Plain HTML example with an import map (`sdk/examples/browser`)
+  - _Requirements: 1.1, 1.4_
+- [x] 3. Proof outbox
+  - [x] 3.1 `outbox.ts`: enqueue once per document, state mapping, `normalizeEndpoint`, `autoSync`
+  - [x] 3.2 `ProofOutboxPanel` on the Test page; verified frames are queued automatically
+  - [x] 3.3 Hardening: single-flight lock, `redirect: "error"`, server field validation, eviction order, hex doc ids, in-memory token
+  - _Requirements: 2.*_
+- [x] 4. Server verifier crate
+  - [x] 4.1 `Verifier::submit` on `ghostpacket-core`, JSONL ledger with `sync_data`, torn-record recovery
+  - [x] 4.2 std-only HTTP with request deadline, strict parsing, connection and rate limits, CORS with exact origin
+  - [x] 4.3 CLI `verify` / `serve` (`--trust` or `--tofu`), secrets from the environment
+  - [x] 4.4 `crypto::validate_public_key` in the core: weak keys refused for pinning
+  - _Requirements: 3.*_
+- [x] 5. Verification
+  - [x] 5.1 Core 52 tests, verifier 12 tests, clippy `-D warnings`, 0 forbidden call
+  - [x] 5.2 SDK: 8 Node tests, 11 headless Chrome checks covering every transport method and sync
+  - [x] 5.3 Site E2E 30/30 including outbox → verifier
+  - [x] 5.4 Review by `dsp-security-auditor`, findings fixed (front-running documented as a limitation)
+  - _Requirements: 1.5, all_

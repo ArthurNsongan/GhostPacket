@@ -1,8 +1,9 @@
 // "The Crypt Ledger": local anti-replay record of verified documents.
 // A document is identified by (issuer fingerprint, docId, signed timestamp).
 // Seeing it again means the same receipt or voucher is being presented twice
-// (offline double-spend). Stored in localStorage: ids, fingerprints, times and
+// (offline double-spend). Stored in the key-value store (localStorage by default): ids, fingerprints, times and
 // the document type only, never message text or decrypted content.
+import { readJson, writeJson } from "./storage";
 import { toHex } from "./wasm-bridge";
 import type { Channel, VerifiedFrame } from "./types";
 import { docTitle } from "./messages";
@@ -32,22 +33,12 @@ function readDocId(bytes: number[]): string {
 }
 
 export function readLedger(scope: LedgerScope): LedgerEntry[] {
-  if (typeof localStorage === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(storageKey(scope));
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as LedgerEntry[]).slice(0, MAX_ENTRIES) : [];
-  } catch {
-    return [];
-  }
+  const parsed = readJson<unknown>(storageKey(scope), []);
+  return Array.isArray(parsed) ? (parsed as LedgerEntry[]).slice(0, MAX_ENTRIES) : [];
 }
 
 function write(scope: LedgerScope, entries: LedgerEntry[]): void {
-  try {
-    localStorage.setItem(storageKey(scope), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
-  } catch {
-    /* storage full or disabled: the ledger still works for this page view */
-  }
+  writeJson(storageKey(scope), entries.slice(0, MAX_ENTRIES));
   listeners.forEach((l) => l());
 }
 

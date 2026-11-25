@@ -5,12 +5,16 @@
 //   const gp = await GhostPacketSDK.load();
 //   const sealed = gp.sealMessage({ sender: "Clinic", title: "Rx", message: "…" }, { passphrase });
 //   if (sealed.ok) await gp.transmitAcoustic(sealed.value.frame);
+//   // Receiver: gp.verifyFrame(frame) → gp.queueProof(frame, v) → gp.syncProofs("https://verifier…")
 import { MicReceiver, playBurst, type AcousticTick } from "./audio-engine";
 import { readKeyring } from "./keyring";
 import { redeem, type LedgerCheck, type LedgerScope } from "./ledger";
 import { messageDraft, type MessageInput } from "./messages";
 import { broadcast, CameraScanner } from "./optical-engine";
+import { autoSync, ProofOutbox, type OutboxItem, type SyncOptions, type SyncReport } from "./outbox";
+import { setStorage, type KeyValueStore } from "./storage";
 import { FLAG_FOUNTAIN, FLAG_FSK, type Channel, type DocumentDraft, type EncodedFrame, type FskMode, type KeyInfo, type VerifiedFrame } from "./types";
+import { configureAssets, type AssetConfig } from "./assets";
 import { loadCore, newSigningSeed, type Core, type Result } from "./wasm-bridge";
 
 export interface SealOptions {
@@ -35,11 +39,24 @@ export interface Verified extends VerifiedFrame {
   replay: LedgerCheck | null;
 }
 
+export interface LoadOptions {
+  /** 32-byte signing seed. Default: fresh random key for this session (never stored). */
+  seed?: Uint8Array;
+  /** WASM binary URL or bytes (Node / tests). */
+  wasm?: AssetConfig["wasm"];
+  /** AudioWorklet URL for `receiveAcoustic`. */
+  workletUrl?: string;
+  /** Storage for ledger, keyring and outbox. Default: localStorage, else memory. */
+  storage?: KeyValueStore;
+}
+
 export const GPKT_MIME = "application/vnd.ghostpacket";
 export const MAX_GPKT_FILE = 512;
 
 export class GhostPacketSDK {
   readonly identity: KeyInfo;
+  /** Verified proofs waiting for (or done with) upload to a ghostpacket-verifier. */
+  readonly outbox = new ProofOutbox();
 
   private constructor(
     readonly core: Core,
@@ -50,9 +67,11 @@ export class GhostPacketSDK {
     this.identity = k.value;
   }
 
-  /** Loads the WASM core and creates an ephemeral signing key for this tab. */
-  static async load(seed: Uint8Array = newSigningSeed()): Promise<GhostPacketSDK> {
-    return new GhostPacketSDK(await loadCore(), seed);
+  /** Loads the WASM core and creates an ephemeral signing key for this session. */
+  static async load(opts: LoadOptions = {}): Promise<GhostPacketSDK> {
+    if (opts.storage) setStorage(opts.storage);
+    if (opts.workletUrl) configureAssets({ workletUrl: opts.workletUrl });
+    return new GhostPacketSDK(await loadCore({ wasm: opts.wasm }), opts.seed ?? newSigningSeed());
   }
 
   static fromCore(core: Core, seed: Uint8Array): GhostPacketSDK {
@@ -95,18 +114,53 @@ export class GhostPacketSDK {
     return broadcast(this.core, frame, canvas, fps, signal);
   }
 
-  /** Scans QR droplets from the rear camera; resolves the rebuilt frame through `onFrame`. */
-  async receiveOptical(video: HTMLVideoElement, onFrame: (frame: Uint8Array) => void): Promise<CameraScanner> {
+  /** Scans QR droplets from the rear camera; each rebuilt frame goes to `onFrame`. */
+  async receiveOptical(
+    video: HTMLVideoElement,
+    onFrame: (frame: Uint8Array) => void,
+    onProgress?: (resolved: number, total: number) => void,
+  ): Promise<CameraScanner> {
     const rx = this.core.fountainRx();
+    let last = "";
     const scanner = new CameraScanner(video, rx, (step) => {
-      if (step.ok && step.value.complete) {
+      if (!step.ok) return;
+      onProgress?.(step.value.resolvedCount, step.value.totalK);
+      if (step.value.complete) {
         const f = rx.frame();
-        if (f.ok) onFrame(f.value);
+        // The emitter loops: report each frame once, not on every lap.
+        if (f.ok) {
+          const key = Array.from(f.value.subarray(-8)).join(",");
+          if (key !== last) {
+            last = key;
+            onFrame(f.value);
+          }
+        }
         rx.reset();
       }
     });
     await scanner.start();
     return scanner;
+  }
+
+  /**
+   * Queues a verified frame for upload; returns the outbox item (deduplicated per document),
+   * or null when the outbox is full of pending proofs (sync first).
+   */
+  queueProof(frame: Uint8Array, verified: VerifiedFrame, channel: Channel = "file"): OutboxItem | null {
+    return this.outbox.enqueue(frame, verified, channel);
+  }
+
+  /**
+   * Uploads pending proofs to a ghostpacket-verifier (`https://…` or local `http://localhost…`).
+   * 201 → synced, 409 → already redeemed elsewhere (double spend), 422 → rejected by the server.
+   */
+  syncProofs(endpoint: string, opts?: SyncOptions): Promise<SyncReport> {
+    return this.outbox.sync(endpoint, opts);
+  }
+
+  /** Syncs automatically each time the browser comes back online. Returns a stop function. */
+  enableAutoSync(endpoint: string | (() => string), onReport?: (r: SyncReport) => void, opts?: SyncOptions): () => void {
+    return autoSync(this.outbox, typeof endpoint === "string" ? () => endpoint : endpoint, onReport, opts);
   }
 
   /** A `.gpkt` file is the raw frame: it starts with the "GPKT" magic. */

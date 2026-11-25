@@ -35,6 +35,17 @@ impl Keypair {
     }
 }
 
+/// Checks that 32 bytes are a usable issuer key: a valid curve point that is
+/// not of small order (such "weak" keys, e.g. all zeros, can never pass
+/// `verify_strict`, so pinning one in a keyring would be meaningless).
+pub fn validate_public_key(public_key: &[u8; PUBLIC_KEY_LEN]) -> Result<(), GhostError> {
+    let key = VerifyingKey::from_bytes(public_key).map_err(|_| GhostError::InvalidPublicKey)?;
+    if key.is_weak() {
+        return Err(GhostError::InvalidPublicKey);
+    }
+    Ok(())
+}
+
 /// Verifies `signature` over `message` with a raw 32-byte public key.
 pub fn verify(
     public_key: &[u8; PUBLIC_KEY_LEN],

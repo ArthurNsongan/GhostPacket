@@ -1,5 +1,6 @@
 // Acoustic channel I/O. All DSP (modulation, noise, demodulation, FFT) runs in
 // WASM through wasm-bridge; this module only moves samples around.
+import { assets } from "./assets";
 import type { Core, Result } from "./wasm-bridge";
 import type { FskDecodeResult, FskMode } from "./types";
 
@@ -264,7 +265,9 @@ export class MicReceiver {
 
     const push = (chunk: Float32Array) => this.push(chunk);
     try {
-      await ctx.audioWorklet.addModule(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/worklets/capture-processor.js`);
+      const url = assets().workletUrl;
+      if (!url) throw new Error("capture worklet URL not configured");
+      await ctx.audioWorklet.addModule(url);
       const worklet = new AudioWorkletNode(ctx, "capture-processor");
       worklet.port.onmessage = (e: MessageEvent<Float32Array>) => push(e.data);
       this.source.connect(worklet);

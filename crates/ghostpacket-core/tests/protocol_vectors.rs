@@ -386,3 +386,14 @@ fn encryption_cost_is_within_budget() {
     println!("native release: seal {seal_ms:.1} ms, open+verify {open_ms:.1} ms");
     assert!(seal_ms < 500.0 && open_ms < 500.0);
 }
+
+#[test]
+fn weak_and_invalid_public_keys_are_refused_for_pinning() {
+    assert!(crypto::validate_public_key(&Keypair::from_seed(&SEED_A).unwrap().public_key()).is_ok());
+    // All zeros decodes to a small-order point: valid encoding, useless key.
+    assert_eq!(crypto::validate_public_key(&[0u8; 32]).unwrap_err(), GhostError::InvalidPublicKey);
+    // The identity point (y = 1) is small order too.
+    let mut identity = [0u8; 32];
+    identity[0] = 1;
+    assert_eq!(crypto::validate_public_key(&identity).unwrap_err(), GhostError::InvalidPublicKey);
+}

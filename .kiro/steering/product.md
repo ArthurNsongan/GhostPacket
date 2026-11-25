@@ -18,12 +18,14 @@ The receiver rebuilds the frame, checks CRC32 then Ed25519, and shows either the
 - **Tontine treasurer** (Dakar): hands a member a signed contribution receipt, offline.
 - **Rural clinician**: sends a verifiable prescription to the nearby pharmacy.
 - **Aid distributor**: issues an offline, tamper-proof relief voucher.
+- **Program back office**: once back online, collects the proofs from every field device and catches a voucher redeemed on two offline devices (double spend).
+- **Integrating developer**: embeds the `ghostpacket-sdk` package in their own app.
 - **Kiroween judge**: must see the whole system work in **under 30 seconds, in 1 click, with no microphone or camera**.
 
 ## Non-negotiable product rules
 1. The full demo runs in 1 click in under 30 s thanks to the virtual loopback (no hardware needed).
 2. Any altered data is rejected with a readable error code (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …).
-3. No network call at runtime, no secret or API key in the client.
+3. No network call at runtime, no secret or API key in the client. The only exception is opt-in: the proof outbox uploads verified frames to a `ghostpacket-verifier` URL that the user (or the integrating app) types in; with no URL set, nothing is sent. The URL must be `https://`, or `http://` on localhost only, and a verifier token is kept in memory, never stored.
 4. Local operations (encode, verify, FFT) answer in under 500 ms (median).
 5. If the microphone or camera is unavailable, the app falls back to the virtual loopback on its own.
 

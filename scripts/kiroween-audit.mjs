@@ -58,7 +58,7 @@ check(".kiro/ contains steering, specs, hooks and MCP settings", () => {
     ".kiro/hooks/kiroween-audit.json",
   ];
   required.push(".kiro/steering/ui-design-system.md", ".kiro/agents/dsp-security-auditor.md");
-  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2"]) {
+  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2", "sdk-and-sync"]) {
     for (const f of ["requirements.md", "design.md", "tasks.md"]) required.push(`.kiro/specs/${spec}/${f}`);
   }
   const missing = required.filter((f) => !existsSync(join(root, f)));
@@ -139,6 +139,24 @@ if (args.has("--full")) {
     const passed = [...(r.stdout ?? "").matchAll(/test result: ok\. (\d+) passed/g)].reduce((a, m) => a + Number(m[1]), 0);
     if (r.status !== 0) throw new Error(`cargo test failed\n${(r.stdout ?? "").slice(-1500)}${(r.stderr ?? "").slice(-800)}`);
     return `${passed} tests passed`;
+  });
+  check("Server verifier tests (real TCP)", () => {
+    const r = spawnSync("cargo", ["test", "--release", "--manifest-path", "crates/ghostpacket-verifier/Cargo.toml"], {
+      cwd: root,
+      encoding: "utf8",
+      shell: process.platform === "win32",
+    });
+    const passed = [...(r.stdout ?? "").matchAll(/test result: ok\. (\d+) passed/g)].reduce((a, m) => a + Number(m[1]), 0);
+    if (r.status !== 0) throw new Error(`cargo test failed\n${(r.stdout ?? "").slice(-1500)}${(r.stderr ?? "").slice(-800)}`);
+    return `${passed} tests passed`;
+  });
+  check("SDK package tests (Node)", () => {
+    if (!existsSync(join(root, "sdk", "dist", "lib", "index.js"))) return "skipped: run node scripts/build-sdk.mjs first";
+    if (!existsSync(join(root, "sdk", "node_modules"))) return "skipped: npm --prefix sdk install";
+    const r = spawnSync("npm", ["--prefix", "sdk", "test"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
+    const pass = /# pass (\d+)|pass (\d+)/.exec(r.stdout ?? "");
+    if (r.status !== 0) throw new Error((r.stdout ?? "").slice(-1500));
+    return `${pass ? pass[1] ?? pass[2] : "all"} tests passed`;
   });
   check("TypeScript typecheck (web)", () => {
     if (!existsSync(join(root, "web", "node_modules"))) throw new Error("web/node_modules missing (npm --prefix web install)");

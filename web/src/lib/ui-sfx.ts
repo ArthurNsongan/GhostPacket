@@ -1,9 +1,16 @@
 // Optional UI sound effects, synthesized with Web Audio (no audio files).
 // Off by default. Never played during a real microphone capture.
 import { audioContext } from "./audio-engine";
+import { kv } from "./storage";
 
 const KEY = "ghostpacket.sfx";
-let enabled = typeof localStorage !== "undefined" && localStorage.getItem(KEY) === "on";
+let enabled = (() => {
+  try {
+    return kv().getItem(KEY) === "on";
+  } catch {
+    return false;
+  }
+})();
 let muted = false;
 const listeners = new Set<(on: boolean) => void>();
 
@@ -14,7 +21,7 @@ export function sfxEnabled(): boolean {
 export function setSfx(on: boolean): void {
   enabled = on;
   try {
-    localStorage.setItem(KEY, on ? "on" : "off");
+    kv().setItem(KEY, on ? "on" : "off");
   } catch {
     /* ignore */
   }

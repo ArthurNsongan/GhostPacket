@@ -18,6 +18,7 @@ import { useShell, type GhostState } from "./AppShell";
 import CryptLedger from "./CryptLedger";
 import FountainGridCanvas, { EMPTY_FOUNTAIN, type FountainView } from "./FountainGridCanvas";
 import { IdentityQr, KeyringPanel } from "./IdentityCard";
+import ProofOutboxPanel from "./ProofOutboxPanel";
 import MessageComposer, { EncryptionToggle, encryptionBlocked, type EncryptionSetting } from "./MessageComposer";
 import type { Source } from "./PayloadComposer";
 import ResultCard from "./ResultCard";
@@ -117,6 +118,8 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
     const trusted = strictRef.current ? readKeyring().map((k) => k.publicKeyHex) : [];
     const v = core.verify(frame, trusted, phrase || undefined);
     const replay = v.ok ? redeem("field", v.value, channel) : null;
+    // Offline-to-cloud: keep the proof for upload to a verifier (sent only if one is configured).
+    if (v.ok) ghost.sdk.queueProof(frame, v.value, channel);
     setVerdict({ channel, v, replay, seq: ++seq.current });
     setLocked(!v.ok && (v.error.code === "PASSPHRASE_REQUIRED" || v.error.code === "DECRYPTION_FAILED") ? { frame, channel } : null);
   };
@@ -410,6 +413,8 @@ export default function FieldModeView({ ghost }: { ghost: GhostState }) {
           <CryptLedger scope="field" note="Persistent on this device. A receipt or voucher presented twice raises REPLAY DETECTED, even offline." />
         </section>
       </div>
+
+      <ProofOutboxPanel ghost={ghost} />
 
       {fullscreenQr && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#e9fff3]" role="dialog" aria-label="Full-screen QR stream">
