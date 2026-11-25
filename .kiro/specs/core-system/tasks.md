@@ -33,5 +33,6 @@
   - [x] 6.2 1-click demo timed under 30 s (≈ 15 s, headless Chrome)
   - [x] 6.3a Field receiver in Chrome with fake microphone (drift + echo + noise) and fake camera (blurred QR codes)
   - [ ] 6.3 Physical PC ↔ phone test
-  - [ ] 6.4 Deployment, 3-minute video, Devpost submission
+  - [x] 6.4 Deployment: https://arthurnsongan.github.io/GhostPacket/ (gh-pages branch), checked in headless Chrome
+  - [ ] 6.5 3-minute video, Devpost submission
   - _Requirements: 1.2, 5.1, 5.2_

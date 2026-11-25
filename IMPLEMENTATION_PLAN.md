@@ -78,7 +78,7 @@ flowchart LR
 ```text
 GhostPacket/
 ├── .gitignore
-├── .github/workflows/pages.yml              # Static deployment to GitHub Pages (HTTPS)
+├── .github/workflows/pages.yml              # Optional manual Actions deployment to GitHub Pages
 ├── IMPLEMENTATION_PLAN.md                   # This plan
 ├── LICENSE                                  # MIT (required by Devpost)
 ├── README.md                                # Architecture, demo, Kiro workflow
@@ -96,7 +96,7 @@ GhostPacket/
 ├── mcp-server/
 │   ├── package.json
 │   └── src/{index,core,smoke}.ts            # stdio MCP server, run by Node directly
-├── scripts/{no-panic-guard,kiroween-audit,copy-wasm}.mjs
+├── scripts/{no-panic-guard,kiroween-audit,copy-wasm,deploy-gh-pages}.mjs
 └── web/
     ├── package.json, next.config.ts, tsconfig.json, postcss.config.mjs
     ├── public/{manifest.json, icon.svg, wasm/, worklets/capture-processor.js}
@@ -229,8 +229,8 @@ The server reads the WASM and presets once at start-up: reconnect it in Kiro aft
 - [x] All automated tests (38 Rust tests incl. fuzzing, TypeScript, Next.js production build).
 - [x] Headless Chrome: 1-click demo in ≈ 14 s, 0 console error, 0 external request.
 - [x] Headless Chrome field receiver with fake microphone (drift + echo + noise → verified at 26.3 s) and fake camera (blurred QR → 20/20 blocks in 3.6 s).
-- [x] GitHub Pages deployment workflow (`.github/workflows/pages.yml`), tested locally under a base path.
-- [ ] Push to GitHub and enable Pages (needs the owner's account).
+- [x] Deployment to GitHub Pages from the `gh-pages` branch (`scripts/deploy-gh-pages.mjs`; the Actions workflow is kept as a manual alternative because the account's Actions jobs were blocked by billing).
+- [x] Live at **https://arthurnsongan.github.io/GhostPacket/**, checked in headless Chrome: 1-click demo in 12.9 s, field receiver verified over fake microphone and fake camera, 0 console error, 0 request outside the Pages origin.
 - [ ] **Physical PC ↔ phone test** (sound + camera QR) to capture the video proof — see the README "Field test" section.
 - [ ] 3-minute video and Devpost form.
 
