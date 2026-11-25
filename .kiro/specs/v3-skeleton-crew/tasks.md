@@ -6,16 +6,23 @@
   - [x] 1.3 Scripts: `copy-wasm`, `sync-app-assets` (new), `build-sdk` (publishable `dist/package.json`), `deploy-gh-pages`, `fix-next-export`; workflow on the root lockfile
   - [x] 1.4 MCP server, type-check hook, steering (`structure`, `tech`, `ui-design-system`), `dsp-security-auditor` and README on the new paths
   - [x] 1.5 Audit check "Skeleton Crew"; secret scan and type check over every workspace
-  - [x] 1.6 Verified: 3 workspaces typecheck, portal 30/30 site checks, SDK 8/8 Node and 11/11 browser, MCP smoke test, audit 12/12
+  - [x] 1.6 Verified: portal 30/30 site checks, SDK Node and browser tests, MCP smoke test, audit 12/12
   - _Requirements: 1.*_
-- [ ] 2. Haunted / Clean Field redesign (Phase 4)
-  - [ ] 2.1 `haunted.css` tokens, `data-theme` / `data-app`, Cinzel Decorative self-hosted, theme switch
-  - [ ] 2.2 `LanternGuardian`, `BatSwarmLayer`, `BloodMoonAtmosphere`, cobweb panels
-  - [ ] 2.3 `haunted-sfx.ts` (Web Audio synthesis, auto-mute while the modem or microphone runs)
+- [x] 2. Haunted / Clean Field redesign (Phase 4)
+  - [x] 2.1 `styles/haunted.css` tokens, `data-theme` / `data-app`, Cinzel Decorative self-hosted, `ThemeControls`, boot script against theme flash (`theme.ts`)
+  - [x] 2.2 `SpectralEmblem` (lantern / plague mask / wax seal, audio-reactive), `BatSwarmLayer`, `BloodMoonAtmosphere` (moon, iron gate, lightning), cobweb panels, `AppFrame`
+  - [x] 2.3 `ui-sfx.ts`: 8 synthesized haunted cues + crypt ambience; `modem-activity.ts` counter; master gain cut to silence while a burst plays or the microphone listens
   - _Requirements: 3.*_
-- [ ] 3. Two distinct apps (Phase 5)
-  - [ ] 3.1 `apps/ghost-clinic`: patients, prescriptions, pharmacy hand-over
-  - [ ] 3.2 `apps/ghost-tontine`: members, rounds, receipts, vouchers
-  - [ ] 3.3 Multi-app GitHub Pages deploy (`/clinic/`, `/tontine/`), per-app service worker scope
+- [x] 3. Two distinct apps (Phase 5)
+  - [x] 3.1 `apps/ghost-clinic`: ward (patients), prescriptions (no patient name in the frame), pharmacy receive + dispense once
+  - [x] 3.2 `apps/ghost-tontine`: members, rounds and pot, receipts to the member wallet, single-use aid vouchers paid out once
+  - [x] 3.3 Shared blocks: `AirTransfer` (`AirSender`, `AirReceiver`, `VirtualHandover`), `FormKit`, `IssuerGate`; SDK `records.ts`, `redemption-policy.ts`, `redeemOnce`, `setStorageNamespace`
+  - [x] 3.4 Multi-app GitHub Pages build (`scripts/build-pages.mjs`: `/`, `/clinic/`, `/tontine/`), per-app service worker and cache
+  - [x] 3.5 `scripts/e2e-apps.mjs`: 22 headless Chrome checks (both apps, isolation, Clean mode, worker scope, 0 error / external request / 404)
+  - [x] 3.6 Review by `dsp-security-auditor`; findings fixed (see design.md "Security review"), SDK tests for the redemption policy
   - _Requirements: 2.*_
-- [ ] 4. High-speed transports and GPKT v2 (Phases 2–3, separate spec `high-speed-transports`)
+- [ ] 4. Open decisions
+  - [ ] 4.1 Persistent issuer key for the clinic and the treasurer (today the key lives for one tab session, so a pin lasts one session)
+  - [ ] 4.2 Dedicated origin (custom domain) instead of the shared `<user>.github.io` origin
+- [ ] 5. High-speed transports and GPKT v2 (Phases 2–3, separate spec `high-speed-transports`)
+- [ ] 6. Supabase backend (Phase 3) or keep `ghostpacket-verifier` as the cloud side

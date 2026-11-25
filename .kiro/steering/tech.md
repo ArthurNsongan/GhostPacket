@@ -21,7 +21,8 @@ inclusion: always
 
 ## Monorepo
 - npm workspaces from the root `package.json` (`packages/*`, `apps/*`), one root `package-lock.json`, Node ≥ 23.6. `mcp-server/` keeps its own lockfile.
-- Root scripts: `npm run wasm`, `npm run build:portal`, `npm run build:sdk`, `npm run typecheck` (every workspace), `npm run test:sdk`, `npm run test:sdk:browser`, `npm run audit`.
+- Root scripts: `npm run wasm`, `npm run build:portal`, `npm run build:pages` (all apps merged into `pages-out/` under `/`, `/clinic/`, `/tontine/`), `npm run dev:portal|dev:clinic|dev:tontine`, `npm run build:sdk`, `npm run typecheck` (every workspace), `npm run test:sdk`, `npm run test:sdk:browser`, `npm run audit`.
+- App E2E: `node scripts/build-pages.mjs --base /GhostPacket && node scripts/e2e-apps.mjs` (headless Chrome, 22 checks).
 
 ## SDK package (`packages/ghostpacket-sdk`)
 - `ghostpacket-sdk`: the TypeScript source is consumed directly by the apps (`exports`: `ghostpacket-sdk/<module>` → `src/<module>.ts`).

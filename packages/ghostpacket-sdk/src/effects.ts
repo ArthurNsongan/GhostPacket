@@ -3,7 +3,7 @@
 
 let bloodTimer: number | null = null;
 
-/** Turns the ambient mist crimson for 1.4 s after a rejection. */
+/** Lightning flash, then the mist and moon turn crimson for 1.6 s after a rejection. */
 export function bloodMoon(): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -12,7 +12,20 @@ export function bloodMoon(): void {
   void root.offsetWidth;
   root.classList.add("blood-moon");
   if (bloodTimer !== null) window.clearTimeout(bloodTimer);
-  bloodTimer = window.setTimeout(() => root.classList.remove("blood-moon"), 1400);
+  bloodTimer = window.setTimeout(() => root.classList.remove("blood-moon"), 1600);
+}
+
+export type SpectralEvent = "transmit" | "verified" | "rejected" | "replay" | "drop" | "synced";
+const eventListeners = new Set<(e: SpectralEvent) => void>();
+
+/** Broadcasts a protocol moment to decorative layers (lantern, bats). Never carries document data. */
+export function spectral(e: SpectralEvent): void {
+  eventListeners.forEach((l) => l(e));
+}
+
+export function onSpectral(fn: (e: SpectralEvent) => void): () => void {
+  eventListeners.add(fn);
+  return () => eventListeners.delete(fn);
 }
 
 const levelListeners = new Set<(rms: number) => void>();

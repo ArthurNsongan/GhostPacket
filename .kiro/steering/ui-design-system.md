@@ -6,8 +6,19 @@ fileMatchPattern: ["apps/*/src/**/*.ts", "apps/*/src/**/*.tsx", "apps/*/src/**/*
 # "Spectral Telemetry" visual system
 
 Full reference: #[[file:UI_DESIGN_GUIDELINES.md]]
+V3 redesign ("Gothic Lantern & Ectoplasm"): #[[file:HALLOWEEN_REDESIGN_PLAN.md]]
 
-## Tokens (defined in `apps/portal/src/app/globals.css`, `@theme` block)
+## V3: Haunted / Clean Field modes
+- `<html data-theme="haunted" | "clean" data-app="portal" | "clinic" | "tontine">`, set before first paint by `themeBootScript(app)` (`ghostpacket-sdk/theme`).
+- Palettes and per-app accents live in `packages/ghostpacket-ui/styles/haunted.css`, which overrides the `@theme` variables below. Components keep the functional class names; app accents use `text-accent`, `ring-accent`, `bg-accent-soft`.
+- Decorative layers carry `haunt-only` and are hidden in Clean Field Mode: `BatSwarmLayer`, `BloodMoonAtmosphere`, cobwebs, ambience. Under `prefers-reduced-motion` they stop moving.
+- Emblems are fine-line SVG (`SpectralEmblem`): a carved lantern for the portal, a plague-doctor mask for the clinic, a wax seal and skeleton key for the tontine. They are never emoji or clipart. Their light follows the audio level, turns ectoplasm on verify and crimson on rejection.
+- Cinzel Decorative (`display-gothic`) is for wordmarks and short titles only. Sentences stay in Instrument Serif.
+- Decoration reacts to protocol events through `spectral()` (`transmit`, `verified`, `rejected`, `replay`, `drop`, `synced`), never to document content.
+- Sound cues come from `ui-sfx` only. They are off by default, never play right before a real burst, and are silenced by the modem counter.
+- New app screens reuse `AppFrame`, `FormKit` (`TabBar`, `TextField`, `NumberField`, `Stat`, `Panel`, `Hero`) and `AirTransfer`.
+
+## Tokens (defined in each app's `src/app/globals.css`, `@theme` block)
 | Tailwind class | Hex | Meaning |
 |---|---|---|
 | `void` | `#07080B` | background (`--bg-abyss`) |

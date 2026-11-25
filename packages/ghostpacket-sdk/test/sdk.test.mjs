@@ -8,7 +8,20 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
-import { GhostPacketSDK, identityText, parseIdentity, readLedger, trustKey } from "../dist/lib/index.js";
+import {
+  clearLedger,
+  collection,
+  GhostPacketSDK,
+  identityText,
+  isGuarded,
+  parseIdentity,
+  readLedger,
+  redeemOnce,
+  redemptionGate,
+  setStorage,
+  setStorageNamespace,
+  trustKey,
+} from "../dist/lib/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wasm = readFileSync(join(here, "..", "dist", "wasm", "ghostpacket_core_bg.wasm"));
@@ -77,6 +90,75 @@ describe("ledger and keyring (in-memory storage on Node)", () => {
     assert.ok(gp.verifyFrame(gp.sealMessage(MSG).value.frame, { strictKeyring: true }).ok);
     assert.equal(gp.verifyFrame(other.sealMessage(MSG).value.frame, { strictKeyring: true }).error?.code, "UNTRUSTED_ISSUER");
     assert.equal(parseIdentity(gp.core, "GPKT-KEY:x:" + "00".repeat(32)).ok, false, "invalid curve point");
+  });
+});
+
+describe("redemption policy (apps: dispense once, pay out once)", () => {
+  const NOW = Math.floor(Date.now() / 1000);
+  const rx = (id) => ({
+    docId: Array.from(id.padEnd(8, " "), (c) => c.charCodeAt(0)),
+    timestamp: NOW,
+    body: { medicalPrescription: { clinic: "Ndiob", practitioner: "Nurse Sarr", patientRef: "PAT-0815 (F, 34 y)", items: [{ drug: "Paracetamol 500 mg", dosage: "1 tablet", days: 3 }], note: "" } },
+  });
+
+  test("a valid signature from an unpinned issuer is not redeemable until pinned", async () => {
+    const stranger = await GhostPacketSDK.load({ seed: new Uint8Array(32).fill(0x31) });
+    const v = gp.verifyFrame(stranger.sealMessage(rx("RX-00001")).value.frame).value;
+    assert.equal(redemptionGate(v, { kind: "medicalPrescription" }).reason, "UNPINNED_ISSUER");
+    assert.ok(redemptionGate(v, { kind: "medicalPrescription", selfKeyHex: stranger.identity.publicKeyHex }).ok, "own session key is trusted");
+    trustKey({ label: "Ndiob", publicKeyHex: stranger.identity.publicKeyHex, fingerprint: stranger.identity.fingerprint });
+    assert.ok(redemptionGate(v, { kind: "medicalPrescription" }).ok);
+    assert.equal(redemptionGate(v, { kind: "emergencyVoucher" }).reason, "WRONG_DOCUMENT");
+  });
+
+  test("DEMO frames, expired vouchers and future timestamps are refused", () => {
+    const self = { selfKeyHex: gp.identity.publicKeyHex };
+    const demo = gp.verifyFrame(gp.sealMessage(rx("RX-00002"), { flags: 0b1110 }).value.frame).value;
+    assert.equal(redemptionGate(demo, { kind: "medicalPrescription", ...self }).reason, "DEMO_FRAME");
+    const voucher = (validUntil, timestamp = NOW) => ({
+      docId: Array.from("AID-0001", (c) => c.charCodeAt(0)),
+      timestamp,
+      body: { emergencyVoucher: { program: "Solidarity fund", distributor: "Treasurer", beneficiaryRef: "MBR-0017", items: [{ label: "Cash", quantity: 15000, unit: "XOF" }], validUntil, note: "" } },
+    });
+    const expired = gp.verifyFrame(gp.sealMessage(voucher(NOW - 60)).value.frame).value;
+    assert.equal(redemptionGate(expired, { kind: "emergencyVoucher", ...self }).reason, "EXPIRED");
+    const future = gp.verifyFrame(gp.sealMessage(voucher(NOW + 86400, NOW + 3600)).value.frame).value;
+    assert.equal(redemptionGate(future, { kind: "emergencyVoucher", ...self }).reason, "FUTURE_TIMESTAMP");
+  });
+
+  test("guarded ledger: once, then replay; no clear; fails closed when storage fails", () => {
+    const v = gp.verifyFrame(gp.sealMessage(rx("RX-00003")).value.frame).value;
+    assert.equal(redeemOnce("dispensed", v, "light").status, "first");
+    assert.equal(redeemOnce("dispensed", v, "sound").status, "replay");
+    assert.ok(isGuarded("dispensed"));
+    clearLedger("dispensed");
+    assert.equal(redeemOnce("dispensed", v, "sound").status, "replay", "a guarded ledger cannot be cleared");
+
+    const map = new Map();
+    setStorage({ getItem: (k) => map.get(k) ?? null, setItem: () => { throw new Error("QuotaExceededError"); }, removeItem: (k) => map.delete(k) });
+    const w = gp.verifyFrame(gp.sealMessage(rx("RX-00004")).value.frame).value;
+    const out = redeemOnce("dispensed", w, "light");
+    assert.equal(out.status, "unavailable");
+    assert.equal(out.code, "LEDGER_WRITE_FAILED");
+    const fresh = new Map();
+    setStorage({ getItem: (k) => fresh.get(k) ?? null, setItem: (k, val) => fresh.set(k, val), removeItem: (k) => fresh.delete(k) });
+  });
+
+  test("app namespaces isolate same-origin data; records never overwrite on id collision", () => {
+    const raw = new Map();
+    setStorage({ getItem: (k) => raw.get(k) ?? null, setItem: (k, val) => raw.set(k, val), removeItem: (k) => raw.delete(k) });
+    setStorageNamespace("clinic");
+    const patients = collection("patients");
+    assert.ok(patients.put({ id: "PAT-0001", name: "Awa" }));
+    let n = 0;
+    const ids = ["PAT-0001", "PAT-0001", "PAT-0002"];
+    const p = patients.insert(() => ids[n++], (id) => ({ id, name: "Ibrahima" }));
+    assert.equal(p.id, "PAT-0002", "drew a new id instead of overwriting");
+    assert.equal(patients.get("PAT-0001").name, "Awa");
+    assert.ok([...raw.keys()].every((k) => k.startsWith("clinic:")), [...raw.keys()].join(" "));
+    setStorageNamespace("tontine");
+    assert.equal(collection("patients").list().length, 0, "another app sees nothing");
+    setStorageNamespace("");
   });
 });
 

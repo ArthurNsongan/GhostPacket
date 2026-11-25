@@ -33,14 +33,14 @@ jobs:
       - name: Install
         run: npm ci
       - name: Build static export
-        run: npm run build:portal
+        run: npm run build:pages
         env:
           # Project pages live under /<repo>; user pages (<user>.github.io) have an empty base path.
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_TELEMETRY_DISABLED: "1"
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: apps/portal/out
+          path: pages-out
 
   deploy:
     needs: build

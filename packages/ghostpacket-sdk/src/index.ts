@@ -1,4 +1,5 @@
-// Public entry of the standalone SDK package (sdk/). Not imported by the site.
+// Public entry of the standalone SDK build (packages/ghostpacket-sdk/dist). Apps of
+// the monorepo import subpaths (ghostpacket-sdk/<module>) instead.
 // Asset URLs default to files shipped next to this module.
 import { configureAssets } from "./assets";
 
@@ -11,12 +12,17 @@ export { GhostPacketSDK, downloadFile, GPKT_MIME, MAX_GPKT_FILE } from "./sdk";
 export type { LoadOptions, SealOptions, VerifyOptions, Verified } from "./sdk";
 export { configureAssets } from "./assets";
 export type { AssetConfig } from "./assets";
-export { setStorage } from "./storage";
+export { setStorage, setStorageNamespace } from "./storage";
+export { collection, shortId, docIdBytes } from "./records";
+export type { Collection, RecordBase } from "./records";
+export { isModemBusy, onModemActivity } from "./modem-activity";
 export type { KeyValueStore } from "./storage";
 export { ProofOutbox, normalizeEndpoint, frameOf, onOutboxChange } from "./outbox";
 export type { OutboxItem, OutboxState, SyncOptions, SyncReport } from "./outbox";
-export { redeem, readLedger, clearLedger, onLedgerChange } from "./ledger";
-export type { LedgerEntry, LedgerCheck, LedgerScope } from "./ledger";
+export { redeem, redeemOnce, findRedemption, guardScope, isGuarded, readLedger, clearLedger, onLedgerChange } from "./ledger";
+export type { LedgerEntry, LedgerCheck, LedgerScope, RedeemOutcome } from "./ledger";
+export { redemptionGate, issuerPinned, kindOf } from "./redemption-policy";
+export type { Gate, GateReason, DocKind } from "./redemption-policy";
 export { identityText, parseIdentity, readKeyring, trustKey, forgetKey, IDENTITY_PREFIX } from "./keyring";
 export type { TrustedKey } from "./keyring";
 export { messageDraft, messageBudget, newDocId, docTitle } from "./messages";

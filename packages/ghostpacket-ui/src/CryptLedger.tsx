@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { clearLedger, onLedgerChange, readLedger, type LedgerEntry, type LedgerScope } from "ghostpacket-sdk/ledger";
+import { clearLedger, isGuarded, onLedgerChange, readLedger, type LedgerEntry, type LedgerScope } from "ghostpacket-sdk/ledger";
 
 function ago(ms: number): string {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -25,9 +25,15 @@ export default function CryptLedger({ scope, note }: { scope: LedgerScope; note?
         <h2 id={`ledger-${scope}`} className="panel-title">
           The Crypt Ledger · anti-replay
         </h2>
-        <button type="button" onClick={() => clearLedger(scope)} className="font-mono text-[10px] text-mute hover:text-alarm" disabled={entries.length === 0}>
-          clear
-        </button>
+        {isGuarded(scope) ? (
+          <span className="font-mono text-[10px] text-mute" title="Forgetting a redemption would allow a second one">
+            append-only · {entries.length}
+          </span>
+        ) : (
+          <button type="button" onClick={() => clearLedger(scope)} className="font-mono text-[10px] text-mute hover:text-alarm" disabled={entries.length === 0}>
+            clear
+          </button>
+        )}
       </div>
       <p className="mt-1 text-[12px] text-mist">
         {note ?? "Each verified document is recorded by issuer and document id. Presenting it again raises REPLAY DETECTED, which blocks offline double-spending."}

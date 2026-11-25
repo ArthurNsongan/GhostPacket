@@ -36,15 +36,14 @@ const basePath = userPage ? "" : `/${repo}`;
 const sha = git(["rev-parse", "--short", "HEAD"], root).stdout.trim();
 const dirty = git(["status", "--porcelain"], root).stdout.trim() !== "";
 
-console.log(`Building apps/portal/out with base path "${basePath}" from ${sha}${dirty ? " (uncommitted changes!)" : ""}…`);
-run("npm", ["run", "build:portal"], {
-  cwd: root,
-  env: { ...process.env, NEXT_PUBLIC_BASE_PATH: basePath, NEXT_TELEMETRY_DISABLED: "1" },
-});
-const out = join(root, "apps", "portal", "out");
-if (!existsSync(join(out, "index.html"))) {
-  console.error("apps/portal/out/index.html missing after build.");
-  process.exit(1);
+console.log(`Building every app with base path "${basePath}" from ${sha}${dirty ? " (uncommitted changes!)" : ""}…`);
+run(process.execPath, [join(root, "scripts", "build-pages.mjs"), "--base", basePath, "--out", "pages-out"], { cwd: root, stdio: ["ignore", "inherit", "inherit"] });
+const out = join(root, "pages-out");
+for (const page of ["index.html", "clinic/index.html", "tontine/index.html"]) {
+  if (!existsSync(join(out, page))) {
+    console.error(`pages-out/${page} missing after build.`);
+    process.exit(1);
+  }
 }
 
 const work = mkdtempSync(join(tmpdir(), "gp-pages-"));

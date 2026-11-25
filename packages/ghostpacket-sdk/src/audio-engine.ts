@@ -1,6 +1,7 @@
 // Acoustic channel I/O. All DSP (modulation, noise, demodulation, FFT) runs in
 // WASM through wasm-bridge; this module only moves samples around.
 import { assets } from "./assets";
+import { modemBusy } from "./modem-activity";
 import type { Core, Result } from "./wasm-bridge";
 import type { FskDecodeResult, FskMode } from "./types";
 
@@ -186,7 +187,10 @@ export async function playBurst(
   src.connect(ctx.destination);
   const start = ctx.currentTime + 0.1;
   src.start(start);
+  // Sound effects stay silent until the burst ends or is aborted.
+  const release = modemBusy();
 
+  try {
   await new Promise<void>((resolve, reject) => {
     const onAbort = () => {
       try {
@@ -211,6 +215,9 @@ export async function playBurst(
     };
     requestAnimationFrame(step);
   });
+  } finally {
+    release();
+  }
   return { ok: true, value: pcm.length / sampleRate };
 }
 
@@ -242,6 +249,8 @@ export class MicReceiver {
   private decimation = 1;
   private acc = 0;
   private accCount = 0;
+  private releaseModem: (() => void) | null = null;
+  private generation = 0;
 
   constructor(
     private readonly core: Core,
@@ -250,14 +259,35 @@ export class MicReceiver {
   ) {}
 
   async start(): Promise<void> {
+    // Sound effects stay silent while the microphone listens.
+    this.releaseModem ??= modemBusy();
+    const generation = ++this.generation;
+    try {
+      await this.open(generation);
+    } catch (e) {
+      this.releaseModem?.();
+      this.releaseModem = null;
+      throw e;
+    }
+    // stop() was called while permissions or the stream were pending: close what open() started.
+    if (generation !== this.generation) this.close();
+  }
+
+  private async open(generation: number): Promise<void> {
     const ctx = await audioContext();
     // Above ~50 kHz (88.2/96/192 kHz interfaces) average groups of samples down
     // to ≤ 48 kHz: the modem tops out at 3.2 kHz, and MAX_SAMPLES counts samples.
     this.decimation = ctx.sampleRate > 50_000 ? Math.ceil(ctx.sampleRate / 48_000) : 1;
     this.sampleRate = ctx.sampleRate / this.decimation;
-    this.stream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
     });
+    if (generation !== this.generation) {
+      // Stopped while the permission prompt was open: never leave the microphone on.
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this.stream = stream;
     this.source = ctx.createMediaStreamSource(this.stream);
     const seconds = this.mode === "fast" ? 14 : 38;
     this.ring = new Float32Array(Math.min(Math.ceil(seconds * this.sampleRate), this.core.limits.maxSamples));
@@ -386,6 +416,12 @@ export class MicReceiver {
   }
 
   stop(): void {
+    // Invalidates a start() still waiting for the microphone.
+    this.generation++;
+    this.close();
+  }
+
+  private close(): void {
     if (this.timer !== null) window.clearInterval(this.timer);
     if (this.raf !== null) cancelAnimationFrame(this.raf);
     this.timer = null;
@@ -396,5 +432,7 @@ export class MicReceiver {
     this.node = null;
     this.source = null;
     this.stream = null;
+    this.releaseModem?.();
+    this.releaseModem = null;
   }
 }

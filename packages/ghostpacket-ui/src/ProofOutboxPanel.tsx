@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { autoSync, normalizeEndpoint, onOutboxChange, saveEndpoint, savedEndpoint, type OutboxItem, type SyncReport } from "ghostpacket-sdk/outbox";
+import { spectral } from "ghostpacket-sdk/effects";
 import { downloadFile } from "ghostpacket-sdk/sdk";
+import { sfx } from "ghostpacket-sdk/ui-sfx";
 import { frameOf } from "ghostpacket-sdk/outbox";
 
 import type { GhostState } from "./GhostContext";
@@ -46,9 +48,21 @@ export default function ProofOutboxPanel({ ghost }: { ghost: GhostState }) {
       ? `Not sent: ${r.networkError}. Proofs stay queued.`
       : `${r.synced} synced, ${r.replays} double spend(s) caught by the server, ${r.rejected} rejected${r.networkError ? ` · stopped: ${r.networkError}` : ""}.`;
 
+  // Spooky cue for the outcome: a double spend tolls the bell, a clean sync chimes.
+  const announce = (r: SyncReport) => {
+    if (r.replays > 0) {
+      spectral("replay");
+      void sfx("replay");
+    } else if (r.synced > 0) {
+      spectral("synced");
+      void sfx("synced");
+    }
+    return describe(r);
+  };
+
   useEffect(() => {
     if (!auto || !norm?.ok) return;
-    return autoSync(sdk.outbox, () => (norm.ok ? norm.url : ""), (r) => setReport(describe(r)), opts);
+    return autoSync(sdk.outbox, () => (norm.ok ? norm.url : ""), (r) => setReport(announce(r)), opts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, norm?.ok && norm.url, sdk, token]);
 
@@ -57,7 +71,7 @@ export default function ProofOutboxPanel({ ghost }: { ghost: GhostState }) {
     saveEndpoint(endpoint.trim());
     setBusy(true);
     try {
-      setReport(describe(await sdk.syncProofs(norm.url, opts)));
+      setReport(announce(await sdk.syncProofs(norm.url, opts)));
     } finally {
       setBusy(false);
     }

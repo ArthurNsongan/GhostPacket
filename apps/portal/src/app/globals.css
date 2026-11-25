@@ -13,6 +13,11 @@
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/700.css";
 
+/* V3 theme layer: Haunted / Clean Field palettes, per-app accent, gothic display font,
+   cobwebs, moon, lightning (shared by every app of the skeleton). Its :root[data-theme]
+   selectors override the @theme defaults below. */
+@import "ghostpacket-ui/styles/haunted.css";
+
 /* Tokens: see .kiro/steering/ui-design-system.md and UI_DESIGN_GUIDELINES.md. */
 @theme {
   --color-void: #07080b;

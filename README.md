@@ -7,7 +7,17 @@ GhostPacket transmits a short **Ed25519-signed document** between two nearby dev
 
 The receiver checks CRC32, then Ed25519, and either shows the document or rejects it with an explicit code (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …).
 
-**Live:** https://arthurnsongan.github.io/GhostPacket/ — four pages:
+**Live:** https://arthurnsongan.github.io/GhostPacket/ with two apps built from the same skeleton:
+
+| App | URL | What it does |
+|---|---|---|
+| **Portal** (*The Haunted Telegraph*) | `/GhostPacket/` | the showcase and test bench below |
+| **GhostClinic** (*The Apothecary's Ward*) | `/GhostPacket/clinic/` | ward records on the device; signed (optionally encrypted) prescriptions with no patient name in the frame, handed to the pharmacy phone, dispensed once |
+| **GhostTontine** (*The Midnight Vault*) | `/GhostPacket/tontine/` | members, rounds and pot; a signed receipt in each member's wallet; single-use aid vouchers paid out once at the pay-out desk |
+
+Both apps have a **virtual hand-over** (the real QR pipeline in software, 30 % of frames lost), so one device and no permission are enough. Every app has a **Haunted / Clean Field** switch in the header ([V3](#v3-skeleton-crew)).
+
+The portal has four pages:
 
 | Page | What it shows |
 |---|---|
@@ -27,7 +37,38 @@ V2 features (`.kiro/specs/platform-v2/`):
 
 Target users: tontine treasurers, rural clinics and aid distributors in low-coverage areas. The three built-in presets are a **Dakar Tontine Receipt** (Tilène Market), a **Ndiob Rural Clinic Prescription** and a **Kaolack Flood Relief Voucher**.
 
-> Kiroween 2026, **Frankenstein** category: Rust/WASM cryptography and DSP, a 1980s-style acoustic modem and optical fountain codes, all in one static web page.
+> Kiroween 2026, **Skeleton Crew** category: one lean air-gap skeleton (Rust/WASM core, TypeScript SDK, React UI kit) powering two distinct offline apps plus the portal.
+
+## V3: Skeleton Crew
+
+The skeleton is `crates/ghostpacket-core` + `packages/ghostpacket-sdk` + `packages/ghostpacket-ui`. Apps contain no crypto or DSP code and import the skeleton only by package name; `scripts/kiroween-audit.mjs` fails if an app bypasses it. Spec: `.kiro/specs/v3-skeleton-crew/`.
+
+| Shared piece | Used by |
+|---|---|
+| `AppFrame` (header, emblem, offline badge, theme switches, atmosphere) | portal, clinic, tontine |
+| `AirSender`, `AirReceiver`, `VirtualHandover` | clinic, tontine |
+| `ResultCard`, `CryptLedger`, `ProofOutboxPanel`, `IdentityQr` | all three |
+| `records.ts` (bounded local collections), `setStorageNamespace` (per-app data on one origin) | clinic, tontine |
+| `redemption-policy.ts` + `redeemOnce` + `IssuerGate` | clinic (dispense), tontine (pay out, wallet) |
+
+**Redemption rule.** A valid signature alone never releases medicine or money: anyone can sign a voucher with a fresh key. The pharmacy and the pay-out desk require the expected document type, no DEMO flag, a pinned issuer (fingerprint checked with the issuer), a plausible timestamp and an unexpired voucher. They then record the redemption in an append-only ledger that fails closed when storage is full.
+
+**Redesign ("Gothic Lantern & Ectoplasm").** Haunted Mode (default) has:
+- fine-line audio-reactive emblems (lantern, plague-doctor mask, wax seal);
+- spectral bats that carry transmissions and burst into embers on lost QR frames;
+- a moon that eclipses crimson with a lightning flash on rejection;
+- cobwebbed panels and Cinzel Decorative wordmarks;
+- synthesized cues (theremin, clock bell, organ fifth, tritone with thunder, funeral bell) and an optional crypt drone.
+
+Every sound is off by default and silenced instantly while the real modem plays or listens. **Clean Field Mode** removes the decoration for real clinics and markets.
+
+```powershell
+npm run build:pages -- --base /GhostPacket   # portal + /clinic + /tontine merged into pages-out/
+node scripts/e2e-apps.mjs                    # 22 headless Chrome checks of both apps
+npm run dev:clinic                           # or dev:portal, dev:tontine
+```
+
+Open decisions: a persistent issuer key (today a pin lasts one issuer session) and a dedicated origin. See `.kiro/specs/v3-skeleton-crew/design.md` → *Known limits*. The high-speed transports of `UPGRADE_PLAN_V3.md` (GPKT v2, ChromaCrypt, OFDM, ultrasonic, WebRTC) are the next phase.
 
 ## Judge demo (under 30 s, 1 click, no hardware)
 
@@ -61,8 +102,10 @@ QR codes in the loopback are actually rendered on a canvas and read back with `j
 | Field mode in Chrome (fake mic, fake camera) | microphone: verified after 26.3 s (350-byte frame, robust mode, 23.6 s burst); camera: 20/20 blocks from blurred QR codes in 3.6 s |
 | Fountain decoding | 100 % of 100 seeds at 30, 40 and 50 % loss, ~1.23 K droplets received on average |
 | Rust tests | 52 in the core (protocol vectors incl. encryption and weak keys, FSK fuzz, fountain fuzz, unit) + 12 in the server verifier (real TCP) |
-| SDK package tests | 8 in Node (incl. sync against the real verifier) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
-| Browser checks (headless Chrome, `/GhostPacket/` base path) | 30/30: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, outbox → verifier sync, offline reload, 0 console error, 0 external request, 0 404 |
+| SDK package tests | 12 in Node (incl. sync against the real verifier and the redemption policy) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
+| V3 apps (headless Chrome, `scripts/e2e-apps.mjs`) | 22/22: clinic ward → sign → virtual hand-over → dispense once → refuse twice; tontine receipt → wallet, voucher → pay out once → refuse twice; per-app storage isolation, Clean Field Mode, per-app worker scope, 0 error / external request / 404 |
+| SDK redemption policy (Node) | unpinned issuer, DEMO frame, expired voucher and future timestamp refused; guarded ledger cannot be cleared and fails closed on a storage error; namespaces isolate apps |
+| Portal browser checks (headless Chrome, `/GhostPacket/` base path) | 30/30: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, outbox → verifier sync, offline reload, 0 console error, 0 external request, 0 404 |
 
 LZ4 is applied only when it shrinks the payload. On these short, varied texts `postcard` is already compact, so the encoder keeps the raw payload.
 

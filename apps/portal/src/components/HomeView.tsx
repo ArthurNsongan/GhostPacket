@@ -20,6 +20,26 @@ const CASES = [
   },
 ];
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+/** Two distinct apps built only from the shared skeleton (see .kiro/specs/v3-skeleton-crew). */
+const APPS = [
+  {
+    href: `${BASE}/clinic/`,
+    name: "GhostClinic",
+    face: "The Apothecary's Ward",
+    tone: "text-[#34d399] ring-[#34d399]/40",
+    text: "Patient records, signed and optionally encrypted prescriptions handed to the pharmacy phone, dispensed once.",
+  },
+  {
+    href: `${BASE}/tontine/`,
+    name: "GhostTontine",
+    face: "The Midnight Vault",
+    tone: "text-[#f59e0b] ring-[#f59e0b]/40",
+    text: "Members, contribution rounds, signed receipts in each member's wallet, single-use aid vouchers paid out once.",
+  },
+];
+
 const STATS = [
   { value: "≈ 1 ms", label: "sign a document (Ed25519, in the browser)" },
   { value: "0", label: "network calls at runtime" },
@@ -33,7 +53,7 @@ export default function HomeView() {
   return (
     <div className="flex flex-col gap-6">
       <section className="panel relative overflow-hidden px-6 py-10 sm:px-10 sm:py-14">
-        <p className="panel-title">Kiroween 2026 · Frankenstein</p>
+        <p className="panel-title">Kiroween 2026 · Skeleton Crew</p>
         <h1 className="display mt-3 max-w-4xl text-[clamp(2.4rem,5vw,4.2rem)] leading-[1.02] text-ink">
           Signed documents that cross the air <em className="text-phosphor glow">with no network at all</em>.
         </h1>
@@ -53,6 +73,26 @@ export default function HomeView() {
           </Link>
         </div>
         <p className="mt-4 font-mono text-[11px] text-mute">No microphone, no camera, no install. Works offline after the first visit.</p>
+      </section>
+
+      <section aria-labelledby="skeleton" className="panel p-6">
+        <h2 id="skeleton" className="display text-3xl text-ink">
+          One skeleton, <em className="text-amber">three apps</em>
+        </h2>
+        <p className="mt-2 max-w-3xl text-sm text-mist">
+          <span className="font-mono text-ink">ghostpacket-core</span> (Rust → WASM), <span className="font-mono text-ink">ghostpacket-sdk</span> and <span className="font-mono text-ink">ghostpacket-ui</span> power this portal and two
+          separate offline apps. Each keeps its own records on the device; none contains crypto or DSP code of its own.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {APPS.map((a) => (
+            <a key={a.name} href={a.href} className={`rounded-xl bg-void/50 p-5 ring-1 transition hover:bg-void ${a.tone}`}>
+              <span className="display-gothic text-2xl">{a.name}</span>
+              <span className="ml-2 font-mono text-[11px] text-mute">{a.face}</span>
+              <p className="mt-2 text-sm text-mist">{a.text}</p>
+              <span className="mt-3 inline-block font-mono text-[11px]">Open {a.name} ↗</span>
+            </a>
+          ))}
+        </div>
       </section>
 
       <section aria-labelledby="stats" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

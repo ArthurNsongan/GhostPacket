@@ -131,5 +131,7 @@ packages/ghostpacket-sdk/dist/
 # Runtime assets copied from the SDK into each app by scripts/sync-app-assets.mjs
 apps/*/public/wasm/
 apps/*/public/worklets/
+# Merged GitHub Pages tree (scripts/build-pages.mjs)
+pages-out/
 *.tgz
 proofs.jsonl

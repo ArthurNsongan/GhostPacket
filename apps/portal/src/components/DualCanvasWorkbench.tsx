@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runAcousticLoopback, type AcousticTick } from "ghostpacket-sdk/audio-engine";
 import { BLOCKED_CAMERA_LOSS, runChimeraRace, type RaceLane, type Sabotage } from "ghostpacket-sdk/chimera";
 import { DEMO_FLAGS, runFullDemo, type DemoStep } from "ghostpacket-sdk/demo-runner";
-import { emitLevel } from "ghostpacket-sdk/effects";
+import { emitLevel, spectral } from "ghostpacket-sdk/effects";
 import { clearLedger, redeem, type LedgerCheck } from "ghostpacket-sdk/ledger";
 import { messageBudget, messageDraft, newDocId, type MessageInput } from "ghostpacket-sdk/messages";
 import { runOpticalLoopback, type OpticalTick } from "ghostpacket-sdk/optical-engine";
@@ -196,6 +196,10 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
     setFates((f) => [...f, fate]);
     conduit.current?.orb(fate);
     if (fate === "ok") void sfx("droplet");
+    else {
+      void sfx("drop");
+      spectral("drop");
+    }
     setQrCaption(`droplet #${t.index} · QR ${t.modules}×${t.modules}`);
     if (t.step) {
       const s = t.step;
@@ -308,6 +312,8 @@ function Workbench({ core, seed, keyInfo }: { core: Core; seed: Uint8Array; keyI
     demoStart.current = performance.now();
     setElapsedMs(0);
     abort.current = new AbortController();
+    spectral("transmit");
+    void sfx("summon");
     try {
       const res = await runFullDemo(
         core,

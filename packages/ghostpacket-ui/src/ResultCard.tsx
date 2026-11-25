@@ -3,7 +3,7 @@
 import type { Result } from "ghostpacket-sdk/wasm-bridge";
 import { useEffect } from "react";
 
-import { bloodMoon } from "ghostpacket-sdk/effects";
+import { bloodMoon, spectral } from "ghostpacket-sdk/effects";
 import type { LedgerCheck } from "ghostpacket-sdk/ledger";
 import { docTitle } from "ghostpacket-sdk/messages";
 import type { DocumentBody, VerifiedFrame } from "ghostpacket-sdk/types";
@@ -141,10 +141,13 @@ export default function ResultCard({
     if (silent || !state) return;
     if (state === "rejected") {
       bloodMoon();
+      spectral("rejected");
       void sfx("rejected");
     } else if (state === "replay") {
-      void sfx("rejected");
+      spectral("replay");
+      void sfx("replay");
     } else {
+      spectral("verified");
       void sfx("verified");
     }
   }, [state, silent]);
