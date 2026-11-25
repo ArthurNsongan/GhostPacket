@@ -7,16 +7,37 @@ GhostPacket transmits a short **Ed25519-signed document** between two nearby dev
 
 The receiver checks CRC32, then Ed25519, and either shows the document or rejects it with an explicit code (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …).
 
+**Live:** https://arthurnsongan.github.io/GhostPacket/ — four pages:
+
+| Page | What it shows |
+|---|---|
+| **Home** | the problem, three field use cases, measured numbers, a 1-click launcher |
+| **How It Works** | animated pipeline, security threat model, SDK integration snippets, `.gpkt` wire format and a drag-and-drop verifier |
+| **Simulation** | the 1-click demo, your own message with optional end-to-end encryption, the Chimera dual-channel race, the tamper lab (click any byte), the Crypt Ledger |
+| **Test (PC ↔ Phone)** | real speaker → microphone and screen → camera transfer, identity QR and trusted keyring, anti-replay ledger |
+
+V2 features (`.kiro/specs/platform-v2/`):
+- **Your own messages** (sender, title, up to 240 bytes of text), not just the three presets.
+- **Optional end-to-end encryption**: ChaCha20-Poly1305 under a PBKDF2-HMAC-SHA256 key (40 000 iterations, fresh salt per frame), so a prescription played aloud in a waiting room stays private. Wrong passphrase → `DECRYPTION_FAILED`.
+- **Anti-replay Crypt Ledger**: a receipt or voucher presented twice raises `REPLAY DETECTED · ALREADY REDEEMED`, even offline.
+- **Trusted keyring**: the sender shows an identity QR; in strict mode any other signer is rejected with `UNTRUSTED_ISSUER`.
+- **Offline**: a same-origin service worker; after one visit the site works in airplane mode (`OFFLINE · AIR-GAP ACTIVE`).
+- **SDK**: `GhostPacketSDK` (`web/src/lib/sdk.ts`) to embed sealing, transmission and verification in another offline app.
+
 Target users: tontine treasurers, rural clinics and aid distributors in low-coverage areas. The three built-in presets are a **Dakar Tontine Receipt** (Tilène Market), a **Ndiob Rural Clinic Prescription** and a **Kaolack Flood Relief Voucher**.
 
 > Kiroween 2026, **Frankenstein** category: Rust/WASM cryptography and DSP, a 1980s-style acoustic modem and optical fountain codes, all in one static web page.
 
 ## Judge demo (under 30 s, 1 click, no hardware)
 
-1. Open the app and stay on **Virtual lab**.
-2. Click **Summon the full demo**.
+On the home page click **Launch the 20 s simulation** (or open **Simulation** and click **Summon the full demo**).
 
-The scenario takes about **15 s** (measured in headless Chrome): it signs the Dakar tontine receipt, sends it by sound with white noise at 10 dB SNR, sends it by QR with 30 % of images lost, verifies the signature on both paths, then curses (flips) one bit and shows the `CRC32_MISMATCH` rejection in the hex inspector. The sliders change the SNR (0 to 25 dB), the loss rate (0 to 60 %) and the frame rate.
+The scenario takes about **15 s** (measured in headless Chrome): it signs the Dakar tontine receipt, sends it by sound with white noise at 10 dB SNR, sends it by QR with 30 % of images lost, verifies the signature on both paths, flags the second delivery of the same document as a replay, then curses (flips) one bit and shows the `CRC32_MISMATCH` rejection in the hex inspector.
+
+Then try, on the same page:
+- **Chimera race**: start it, then press *Jam audio* or *Block camera 85 %*. The other channel still delivers a verified frame.
+- **Tamper lab**: *Curse payload* → `CRC32_MISMATCH`, *Curse signature* → `INVALID_SIGNATURE`, *Forge rogue key* → `UNTRUSTED_ISSUER`, *Wrong passphrase* → `DECRYPTION_FAILED`; or click any byte of the frame and see which layer caught it.
+- **Write a message**, turn on end-to-end encryption, send it over QR: the receiver decrypts and shows the plaintext; the inspector marks the payload `ENC`. The sliders change the SNR (0 to 25 dB), the loss rate (0 to 60 %) and the frame rate.
 
 QR codes in the loopback are actually rendered on a canvas and read back with `jsQR`. Noise and loss come from the same deterministic simulator used by the Rust fuzz tests.
 
@@ -30,12 +51,16 @@ QR codes in the loopback are actually rendered on a canvas and read back with `j
 | Payload | 220 to 274 bytes (target 150–300) |
 | Encode + sign | ~1 ms in the browser |
 | Verify | ~0.5 ms |
-| WASM | ~240 KB gzip (budget 350 KB) |
+| Encrypted encode / decrypt + verify | ~89 / ~90 ms in WASM (PBKDF2 40 000 iterations) |
+| Largest encrypted custom message | 511 bytes |
+| WASM | ~252 KB gzip (budget 350 KB) |
 | Acoustic burst, fast / robust | 8.1 s / 20.3 s for 296 bytes |
 | FSK decoding | 100 % at 6 to 20 dB SNR (fuzz suite) |
 | Clock drift and room echo | 100 % from −300 to +300 ppm with two reflections, at 12 dB SNR (symbol timing tracking) |
 | Field mode in Chrome (fake mic, fake camera) | microphone: verified after 26.3 s (350-byte frame, robust mode, 23.6 s burst); camera: 20/20 blocks from blurred QR codes in 3.6 s |
 | Fountain decoding | 100 % of 100 seeds at 30, 40 and 50 % loss, ~1.23 K droplets received on average |
+| Rust tests | 51 (protocol vectors incl. encryption, FSK fuzz, fountain fuzz, unit) |
+| Browser checks (headless Chrome, `/GhostPacket/` base path) | 26/26: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, offline reload, 0 console error, 0 external request, 0 404 |
 
 LZ4 is applied only when it shrinks the payload. On these short, varied texts `postcard` is already compact, so the encoder keeps the raw payload.
 
@@ -44,6 +69,8 @@ LZ4 is applied only when it shrinks the payload. On these short, varied texts `p
 ```text
 [GPKT 4B][Version 1B][Flags 1B][Length N 2B][Payload N B][CRC32 4B][Ed25519 64B]   = 76 + N ≤ 512 bytes
 ```
+
+Flags: b0 LZ4 · b1 FSK · b2 FOUNTAIN · b3 DEMO · b4 ENCRYPTED. An encrypted payload is `[salt 16][ciphertext][tag 16]`; the header is authenticated as AAD and the signature covers the ciphertext. A `.gpkt` file is simply the raw frame.
 
 The full specification, with the verification order and every error code, is in [`.kiro/specs/binary-protocol/design.md`](.kiro/specs/binary-protocol/design.md).
 
@@ -101,13 +128,14 @@ If the sound path fails, lower the speaker volume (clipping), move closer, or cu
 
 ## How we built GhostPacket with Kiro
 
-- **Specs** (`.kiro/specs/`): five specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
+- **Specs** (`.kiro/specs/`): six specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
 - **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `web/src/**` and carries the "Spectral Telemetry" visual system.
 - **Hooks** (`.kiro/hooks/`, v1 format):
   - `fuzz-noise-channel` runs the acoustic and optical fuzz suites whenever a codec file is saved.
   - `wasm-no-panic-guard` rejects `unwrap`, `expect` and `panic!` in `src/`.
   - `ts-typecheck-on-save` runs `tsc --noEmit`.
   - `kiroween-audit` runs on `Stop` and checks `.kiro/` tracking, secrets, the licence, WASM size and the full test suite.
+- **Custom agent** (`.kiro/agents/dsp-security-auditor.md`): a read-only reviewer for DSP correctness and security. It audited V2 before release; its findings (decrypted titles written to the ledger, mic failure above 50 kHz, PBKDF2 cost, key zeroization, NFC passphrases, empty-passphrase fallback) were fixed and are listed in `.kiro/specs/platform-v2/design.md`.
 - **MCP** (`mcp-server/`): `ghostpacket-inspector` loads the same `.wasm` binary as the browser and exposes three tools: `inspect_frame_hex`, `run_channel_benchmark` and `check_kiroween_compliance`.
 
 The fuzz hook caught two real bugs in the fountain code:
@@ -122,6 +150,7 @@ An "air" test (clock drift between devices plus room echo) then showed the acous
 
 - The signing key comes from 32 bytes of `crypto.getRandomValues`, stays in the tab's memory and is never sent anywhere.
 - The issuer's public key is inside the signed document. An optional keyring rejects unknown issuers with `UNTRUSTED_ISSUER`.
+- Optional end-to-end encryption (ChaCha20-Poly1305, PBKDF2-HMAC-SHA256 40 000 iterations, NFC passphrase, fresh 16-byte salt per frame). Derived keys and decrypted plaintext are zeroized in WASM. The ledger and keyring store public data only (ids, fingerprints, public keys), never message text.
 - Untrusted lengths are bounded before allocation: frame ≤ 512 bytes, decompressed size ≤ 4096 bytes (LZ4 bomb blocked), ≤ 256 pending droplets.
 - No network call at runtime: fonts are self-hosted and the WASM is served from the same origin.
 

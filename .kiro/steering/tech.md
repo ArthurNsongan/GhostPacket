@@ -7,7 +7,7 @@ inclusion: always
 ## Core (Rust → WebAssembly)
 - Single crate: `crates/ghostpacket-core`, `crate-type = ["cdylib", "rlib"]`.
 - Target: `wasm32-unknown-unknown`, built with `wasm-pack build --target web`.
-- Allowed dependencies (pure Rust, WASM-friendly): `wasm-bindgen`, `js-sys`, `serde`, `serde-wasm-bindgen`, `postcard`, `lz4_flex`, `crc32fast`, `ed25519-dalek`, `sha2`, `rustfft`.
+- Allowed dependencies (pure Rust, WASM-friendly): `wasm-bindgen`, `js-sys`, `serde`, `serde-wasm-bindgen`, `postcard`, `lz4_flex`, `crc32fast`, `ed25519-dalek`, `sha2`, `rustfft`, and for optional end-to-end encryption `chacha20poly1305`, `pbkdf2`, `zeroize` (all with default features off: no `getrandom`).
 - No source of randomness in the crate: Ed25519 seeds and noise seeds come from the caller (`crypto.getRandomValues` on the web, constants in tests).
 - Tests: `cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml`.
 
@@ -16,6 +16,8 @@ inclusion: always
 - Web Audio API (`AudioContext`, `AudioWorklet`, `ScriptProcessor` fallback) for the acoustic channel.
 - Canvas 2D for the spectrogram, fountain grid and QR codes.
 - Camera: `getUserMedia` + native `BarcodeDetector`, `jsQR` fallback.
+- Offline: same-origin service worker `web/public/sw.js`; four static routes with `trailingSlash`.
+- Build: `npm run build` = `next build` + `scripts/fix-next-export.mjs` (flattens Next 16 prefetch files for static hosts).
 - Fonts self-hosted with `@fontsource`.
 - Type check: `npm --prefix web run typecheck` (`tsc --noEmit`).
 
@@ -30,6 +32,7 @@ inclusion: always
 | Preset payloads | 150–300 bytes |
 | Encode + sign | < 15 ms |
 | Verify | < 15 ms |
+| Encrypted encode / decrypt + verify (PBKDF2 40k) | < 500 ms (≈ 90 ms measured in WASM) |
 | 1024-point FFT | < 5 ms |
 | Gzipped `.wasm` | < 350 KB |
 

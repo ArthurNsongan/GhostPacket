@@ -6,6 +6,7 @@
 
 pub mod channel_sim;
 pub mod crypto;
+pub mod encryption;
 pub mod error;
 pub mod fec;
 pub mod fountain;
@@ -55,6 +56,13 @@ struct Limits {
     max_decompressed_bytes: usize,
     droplet_block_size: usize,
     max_samples: usize,
+    max_sender_bytes: usize,
+    max_title_bytes: usize,
+    max_message_bytes: usize,
+    encryption_overhead: usize,
+    salt_len: usize,
+    pbkdf2_iterations: u32,
+    max_passphrase_bytes: usize,
 }
 
 /// Crate version, for the UI footer and the MCP inspector.
@@ -74,7 +82,35 @@ pub fn limits() -> Result<JsValue, JsValue> {
         max_decompressed_bytes: protocol::MAX_DECOMPRESSED_BYTES,
         droplet_block_size: fountain::DEFAULT_BLOCK_SIZE,
         max_samples: fsk::MAX_SAMPLES,
+        max_sender_bytes: schema::MAX_SENDER_BYTES,
+        max_title_bytes: schema::MAX_TITLE_BYTES,
+        max_message_bytes: schema::MAX_MESSAGE_BYTES,
+        encryption_overhead: encryption::ENCRYPTION_OVERHEAD,
+        salt_len: encryption::SALT_LEN,
+        pbkdf2_iterations: encryption::PBKDF2_ITERATIONS,
+        max_passphrase_bytes: encryption::MAX_PASSPHRASE_BYTES,
     })
+}
+
+/// Fingerprint of a 64-char hex Ed25519 public key (keyring / identity QR).
+/// Rejects strings that are not a valid curve point.
+#[wasm_bindgen]
+pub fn fingerprint_of(public_key_hex: &str) -> Result<String, JsValue> {
+    let key = parse_public_key(public_key_hex).map_err(js_err)?;
+    Ok(crypto::fingerprint(&key))
+}
+
+fn parse_public_key(hex: &str) -> Result<[u8; 32], GhostError> {
+    if hex.trim().len() != 64 {
+        return Err(GhostError::InvalidPublicKey);
+    }
+    let bytes = crypto::from_hex(hex)?;
+    let key: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| GhostError::InvalidPublicKey)?;
+    ed25519_dalek::VerifyingKey::from_bytes(&key).map_err(|_| GhostError::InvalidPublicKey)?;
+    Ok(key)
 }
 
 #[derive(Serialize)]
@@ -96,43 +132,62 @@ pub fn key_info(seed: &[u8]) -> Result<JsValue, JsValue> {
 }
 
 /// Serializes, compresses and signs a document draft.
-/// Returns metadata plus `frame: Uint8Array`.
+/// With `passphrase` and a fresh 16-byte `salt`, the payload is encrypted
+/// (ChaCha20-Poly1305, FLAG_ENCRYPTED). Returns metadata plus `frame: Uint8Array`.
 #[wasm_bindgen]
-pub fn encode_document(draft: JsValue, signing_seed: &[u8], flags: u8) -> Result<JsValue, JsValue> {
+pub fn encode_document(
+    draft: JsValue,
+    signing_seed: &[u8],
+    flags: u8,
+    passphrase: Option<String>,
+    salt: Option<Vec<u8>>,
+) -> Result<JsValue, JsValue> {
     let draft: DocumentDraft = serde_wasm_bindgen::from_value(draft)
         .map_err(|_| js_err(GhostError::InvalidArgument { what: "document draft" }))?;
-    let encoded = protocol::encode_frame(draft, signing_seed, flags).map_err(js_err)?;
+    let encryption = match (&passphrase, &salt) {
+        (Some(p), Some(s)) => Some(protocol::Encryption {
+            passphrase: p.as_bytes(),
+            salt: s.as_slice(),
+        }),
+        (Some(_), None) => return Err(js_err(GhostError::InvalidSalt { len: 0 })),
+        (None, _) => None,
+    };
+    let encoded = protocol::encode_frame_with(draft, signing_seed, flags, encryption).map_err(js_err)?;
     let obj = to_js(&encoded)?;
     with_bytes(obj, "frame", &encoded.bytes)
 }
 
-/// Full verification (structure, CRC32, LZ4, schema, Ed25519).
+/// Full verification (structure, CRC32, decryption, LZ4, schema, keyring, Ed25519).
 /// `trusted_hex` is an array of 64-char hex public keys; empty = TOFU mode.
+/// `passphrase` opens encrypted frames.
 #[wasm_bindgen]
-pub fn decode_frame(frame: &[u8], trusted_hex: JsValue) -> Result<JsValue, JsValue> {
+pub fn decode_frame(frame: &[u8], trusted_hex: JsValue, passphrase: Option<String>) -> Result<JsValue, JsValue> {
+    // Bound the keyring before converting (and copying) its strings.
+    if js_sys::Array::is_array(&trusted_hex) && js_sys::Array::from(&trusted_hex).length() > 256 {
+        return Err(js_err(GhostError::InvalidArgument { what: "keyring size" }));
+    }
     let list: Vec<String> = if trusted_hex.is_undefined() || trusted_hex.is_null() {
         Vec::new()
     } else {
         serde_wasm_bindgen::from_value(trusted_hex)
             .map_err(|_| js_err(GhostError::InvalidArgument { what: "trusted keys" }))?
     };
+    if list.len() > 256 {
+        return Err(js_err(GhostError::InvalidArgument { what: "keyring size" }));
+    }
     let mut trusted = Vec::with_capacity(list.len());
     for hex in &list {
-        let bytes = crypto::from_hex(hex).map_err(js_err)?;
-        let key: [u8; 32] = bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| js_err(GhostError::InvalidPublicKey))?;
-        trusted.push(key);
+        trusted.push(parse_public_key(hex).map_err(js_err)?);
     }
-    let verified = protocol::decode_and_verify_frame(frame, &trusted).map_err(js_err)?;
+    let verified = protocol::decode_and_verify_frame_with(frame, &trusted, passphrase.as_deref().map(str::as_bytes))
+        .map_err(js_err)?;
     to_js(&verified)
 }
 
 /// Field-by-field dissection for the hex inspector (never fails).
 #[wasm_bindgen]
-pub fn inspect_frame(frame: &[u8]) -> Result<JsValue, JsValue> {
-    to_js(&protocol::inspect_frame(frame))
+pub fn inspect_frame(frame: &[u8], passphrase: Option<String>) -> Result<JsValue, JsValue> {
+    to_js(&protocol::inspect_frame_with(frame, passphrase.as_deref().map(str::as_bytes)))
 }
 
 /// PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms).

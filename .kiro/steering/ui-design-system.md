@@ -21,6 +21,18 @@ Full reference: #[[file:UI_DESIGN_GUIDELINES.md]]
 
 Class names (`phosphor`, `ion`, `amber`, `alarm`) are functional: a colour change happens in `@theme`, not in components.
 
+## V2 components
+| Component | Role |
+|---|---|
+| `AppShell` | glass header, 4-page nav, `AIR-GAP READY` / `OFFLINE · AIR-GAP ACTIVE` badge, UI SFX toggle, Kiro Telemetry drawer, audio-reactive sigil (`effects.onLevel`), border spotlight (`--mx`/`--my` on `.panel::before`) |
+| `EtherConduit` | 60 FPS canvas bridge: real waveform + droplet orbs, lost ones shatter into crimson embers |
+| Blood Moon | `effects.bloodMoon()` adds `.blood-moon` to `<html>` for 1.4 s on any rejection (`ResultCard`) |
+| `TamperLab`, `FrameInspector` (`onCurseByte`) | attack buttons and click-any-byte, layer chips ✓ ✗ · |
+| `FountainGridCanvas` | domino cascade (35 ms stagger), `CASCADE ×N` and `GAUSS GF(2)` badges |
+| `CryptLedger`, `IdentityCard`, `MessageComposer`, `GpktVerifier`, `KiroTelemetry` | V2 features |
+
+UI sounds (`ui-sfx.ts`) are off by default and muted while the microphone listens, so they can never jam the modem.
+
 ## Rules
 - Every glow carries technical information; no decorative neon.
 - Fonts are self-hosted with `@fontsource` (no network call, product rule 3): `Instrument Serif` (titles), `Plus Jakarta Sans` (UI), `JetBrains Mono` + `tabular-nums` (telemetry).

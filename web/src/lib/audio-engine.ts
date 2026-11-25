@@ -4,6 +4,13 @@ import type { Core, Result } from "./wasm-bridge";
 import type { FskDecodeResult, FskMode } from "./types";
 
 export const FFT_SIZE = 1024;
+/** Squelch threshold: 1.6× the noise floor in RMS (≈ 4 dB), never below −74 dBFS. */
+const SQUELCH_RATIO = 1.6;
+const SQUELCH_MIN_RMS = 0.0002;
+/** Initial floor cap (≈ −54 dBFS, a quiet room): a loud first chunk cannot set the floor. */
+const SQUELCH_INIT_MAX_RMS = 0.002;
+/** Jammer 25 dB louder than the modem. (At −10 dB the Goertzel gain still decodes.) */
+export const JAM_SNR_DB = -25;
 
 export interface AcousticTick {
   /** Latest FFT_SIZE samples heard by the receiver. */
@@ -41,6 +48,8 @@ export interface LoopbackOptions {
   volume?: number;
   signal?: AbortSignal;
   onTick?: (tick: AcousticTick) => void;
+  /** Chimera race sabotage: once true, the rest of the burst is drowned by a jammer at JAM_SNR_DB. */
+  jammed?: () => boolean;
 }
 
 export interface LoopbackOutcome {
@@ -106,6 +115,7 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
 
   const t0 = performance.now();
   let syncLocked = false;
+  let jamApplied = false;
   let lastProbe = 0;
   const probeEvery = 250;
   const preambleSamples = sampleRate * (opts.mode === "fast" ? 0.006 : 0.015) * 45;
@@ -120,6 +130,13 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
       if (opts.signal?.aborted) return;
       const cursor = Math.min(total, Math.floor(clock()));
       const now = performance.now();
+      if (!jamApplied && opts.jammed?.()) {
+        jamApplied = true;
+        const rest = rx.subarray(cursor);
+        const jam = core.injectNoise(new Float32Array(rest.length), JAM_SNR_DB, opts.seed ^ 0x6a4d);
+        for (let i = 0; i < rest.length; i++) rest[i] = (rest[i] ?? 0) + (jam[i] ?? 0);
+        stopAudio();
+      }
       if (!syncLocked && cursor > lead + preambleSamples && now - lastProbe > probeEvery) {
         lastProbe = now;
         const probe = core.fskDemodulate(rx.subarray(0, cursor), sampleRate, opts.mode);
@@ -153,7 +170,9 @@ export async function playBurst(
   opts: { volume?: number; signal?: AbortSignal; onTick?: (tick: AcousticTick) => void } = {},
 ): Promise<Result<number>> {
   const ctx = await audioContext();
-  const sampleRate = ctx.sampleRate;
+  // Synthesize at ≤ 48 kHz (MAX_SAMPLES is a sample count: a 96 kHz robust burst
+  // would exceed it). The AudioBuffer carries its own rate; the browser resamples.
+  const sampleRate = Math.min(ctx.sampleRate, 48_000);
   const modulated = core.fskModulate(frame, sampleRate, mode);
   if (!modulated.ok) return modulated;
   const pcm = modulated.value;
@@ -216,6 +235,12 @@ export class MicReceiver {
   private raf: number | null = null;
   private sampleRate = 48_000;
   private lastFrameHex = "";
+  /** Adaptive noise floor (RMS) and the sample index of the last loud chunk. */
+  private noiseFloor = 0;
+  private lastLoudAt = -Infinity;
+  private decimation = 1;
+  private acc = 0;
+  private accCount = 0;
 
   constructor(
     private readonly core: Core,
@@ -225,13 +250,16 @@ export class MicReceiver {
 
   async start(): Promise<void> {
     const ctx = await audioContext();
-    this.sampleRate = ctx.sampleRate;
+    // Above ~50 kHz (88.2/96/192 kHz interfaces) average groups of samples down
+    // to ≤ 48 kHz: the modem tops out at 3.2 kHz, and MAX_SAMPLES counts samples.
+    this.decimation = ctx.sampleRate > 50_000 ? Math.ceil(ctx.sampleRate / 48_000) : 1;
+    this.sampleRate = ctx.sampleRate / this.decimation;
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
     });
     this.source = ctx.createMediaStreamSource(this.stream);
     const seconds = this.mode === "fast" ? 14 : 38;
-    this.ring = new Float32Array(Math.ceil(seconds * this.sampleRate));
+    this.ring = new Float32Array(Math.min(Math.ceil(seconds * this.sampleRate), this.core.limits.maxSamples));
     this.written = 0;
 
     const push = (chunk: Float32Array) => this.push(chunk);
@@ -268,11 +296,55 @@ export class MicReceiver {
     this.raf = requestAnimationFrame(draw);
   }
 
-  private push(chunk: Float32Array): void {
+  private push(raw: Float32Array): void {
+    const chunk = this.decimate(raw);
     const n = this.ring.length;
-    if (n === 0) return;
-    for (let i = 0; i < chunk.length; i++) this.ring[(this.written + i) % n] = chunk[i] ?? 0;
+    if (n === 0 || chunk.length === 0) return;
+    let sum = 0;
+    for (let i = 0; i < chunk.length; i++) {
+      const x = chunk[i] ?? 0;
+      this.ring[(this.written + i) % n] = x;
+      sum += x * x;
+    }
     this.written += chunk.length;
+    this.updateSquelch(Math.sqrt(sum / chunk.length));
+  }
+
+  /** Box-average decimation, carrying partial groups across chunks. */
+  private decimate(raw: Float32Array): Float32Array {
+    const d = this.decimation;
+    if (d === 1) return raw;
+    const out = new Float32Array(Math.floor((this.accCount + raw.length) / d));
+    let o = 0;
+    for (const x of raw) {
+      this.acc += x;
+      if (++this.accCount === d) {
+        out[o++] = this.acc / d;
+        this.acc = 0;
+        this.accCount = 0;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Energy squelch. The floor follows quiet chunks quickly and rises slowly, so
+   * a burst cannot pull it up. A chunk ~4 dB above the floor counts as loud:
+   * any burst at ≥ 6 dB SNR (the decodable range) passes.
+   */
+  private updateSquelch(rms: number): void {
+    // Start low, so a burst present from the first chunk still counts as loud.
+    if (this.noiseFloor === 0) this.noiseFloor = Math.max(SQUELCH_MIN_RMS, Math.min(rms, SQUELCH_INIT_MAX_RMS));
+    else if (rms < this.noiseFloor) this.noiseFloor = Math.max(SQUELCH_MIN_RMS, 0.7 * this.noiseFloor + 0.3 * rms);
+    // Slow rise: during a 38 s robust burst (~900 worklet chunks of 2048 samples)
+    // the floor moves ~36 % of the way up, still well under the 1.6× threshold.
+    else this.noiseFloor = 0.9995 * this.noiseFloor + 0.0005 * rms;
+    if (rms > Math.max(SQUELCH_MIN_RMS, this.noiseFloor * SQUELCH_RATIO)) this.lastLoudAt = this.written;
+  }
+
+  /** True while something louder than the floor is still inside the ring buffer. */
+  private hasSignal(): boolean {
+    return this.written - this.lastLoudAt < this.ring.length;
   }
 
   /** Last `size` samples in chronological order. */
@@ -286,6 +358,11 @@ export class MicReceiver {
   }
 
   private probe(): void {
+    // Squelch: skip the demodulator (and its false FEC errors) on pure room noise.
+    if (!this.hasSignal()) {
+      this.cb.onStatus?.("listening");
+      return;
+    }
     const buf = this.latest(this.ring.length);
     const res = this.core.fskDemodulate(buf, this.sampleRate, this.mode);
     if (res.ok) {
@@ -300,8 +377,9 @@ export class MicReceiver {
       return;
     }
     if (res.error.code === "FSK_INCOMPLETE") this.cb.onStatus?.("sync");
-    else if (res.error.code === "FEC_UNCORRECTABLE") this.cb.onStatus?.("error", res.error.message);
-    else this.cb.onStatus?.("listening");
+    else if (res.error.code === "FSK_NO_PREAMBLE" || res.error.code === "FSK_TOO_SHORT") this.cb.onStatus?.("listening");
+    // Anything else (FEC_UNCORRECTABLE, TOO_MANY_SAMPLES, …) is shown, never hidden as "listening".
+    else this.cb.onStatus?.("error", `${res.error.code}: ${res.error.message}`);
   }
 
   stop(): void {

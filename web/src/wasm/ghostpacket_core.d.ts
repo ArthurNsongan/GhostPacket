@@ -45,16 +45,24 @@ export function core_version(): string;
 export function crc32(data: Uint8Array | number[]): number;
 
 /**
- * Full verification (structure, CRC32, LZ4, schema, Ed25519).
+ * Full verification (structure, CRC32, decryption, LZ4, schema, keyring, Ed25519).
  * `trusted_hex` is an array of 64-char hex public keys; empty = TOFU mode.
+ * `passphrase` opens encrypted frames.
  */
-export function decode_frame(frame: Uint8Array | number[], trusted_hex: any): any;
+export function decode_frame(frame: Uint8Array | number[], trusted_hex: any, passphrase?: string | null): any;
 
 /**
  * Serializes, compresses and signs a document draft.
- * Returns metadata plus `frame: Uint8Array`.
+ * With `passphrase` and a fresh 16-byte `salt`, the payload is encrypted
+ * (ChaCha20-Poly1305, FLAG_ENCRYPTED). Returns metadata plus `frame: Uint8Array`.
  */
-export function encode_document(draft: any, signing_seed: Uint8Array | number[], flags: number): any;
+export function encode_document(draft: any, signing_seed: Uint8Array | number[], flags: number, passphrase?: string | null, salt?: Uint8Array | number[] | null): any;
+
+/**
+ * Fingerprint of a 64-char hex Ed25519 public key (keyring / identity QR).
+ * Rejects strings that are not a valid curve point.
+ */
+export function fingerprint_of(public_key_hex: string): string;
 
 /**
  * Copy of `frame` with one bit flipped (US-03 integrity demo).
@@ -84,7 +92,7 @@ export function inject_awgn(samples: Float32Array | number[], snr_db: number, se
 /**
  * Field-by-field dissection for the hex inspector (never fails).
  */
-export function inspect_frame(frame: Uint8Array | number[]): any;
+export function inspect_frame(frame: Uint8Array | number[], passphrase?: string | null): any;
 
 /**
  * Deterministic optical loss decision for droplet `index`.
@@ -110,8 +118,9 @@ export interface InitOutput {
     readonly __wbg_spectrum_free: (a: number, b: number) => void;
     readonly core_version: () => [number, number];
     readonly crc32: (a: number, b: number) => number;
-    readonly decode_frame: (a: number, b: number, c: any) => [number, number, number];
-    readonly encode_document: (a: any, b: number, c: number, d: number) => [number, number, number];
+    readonly decode_frame: (a: number, b: number, c: any, d: number, e: number) => [number, number, number];
+    readonly encode_document: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+    readonly fingerprint_of: (a: number, b: number) => [number, number, number, number];
     readonly flip_bit: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly fountainrx_frame: (a: number) => [number, number, number, number];
     readonly fountainrx_ingest: (a: number, b: number, c: number) => [number, number, number];
@@ -127,7 +136,7 @@ export interface InitOutput {
     readonly fsk_demodulate: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly fsk_modulate: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly inject_awgn: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly inspect_frame: (a: number, b: number) => [number, number, number];
+    readonly inspect_frame: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly is_dropped: (a: number, b: number, c: number) => number;
     readonly key_info: (a: number, b: number) => [number, number, number];
     readonly limits: () => [number, number, number];

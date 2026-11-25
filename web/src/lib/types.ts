@@ -42,6 +42,13 @@ export type DocumentBody =
         validUntil: number;
         note: string;
       };
+    }
+  | {
+      customMessage: {
+        sender: string;
+        title: string;
+        message: string;
+      };
     };
 
 export interface DocumentDraft {
@@ -62,6 +69,7 @@ export interface EncodedFrame {
   serializedLen: number;
   payloadLen: number;
   compressed: boolean;
+  encrypted: boolean;
   flags: number;
   crc32: number;
   issuerPubkeyHex: string;
@@ -75,6 +83,7 @@ export interface VerifiedFrame {
   payloadLen: number;
   decompressedLen: number;
   compressed: boolean;
+  encrypted: boolean;
   flags: number;
   crc32: number;
   issuerPubkeyHex: string;
@@ -138,6 +147,13 @@ export interface Limits {
   maxDecompressedBytes: number;
   dropletBlockSize: number;
   maxSamples: number;
+  maxSenderBytes: number;
+  maxTitleBytes: number;
+  maxMessageBytes: number;
+  encryptionOverhead: number;
+  saltLen: number;
+  pbkdf2Iterations: number;
+  maxPassphraseBytes: number;
 }
 
 /** Error object thrown by every WASM function. */
@@ -157,3 +173,6 @@ export const FLAG_LZ4 = 0b0001;
 export const FLAG_FSK = 0b0010;
 export const FLAG_FOUNTAIN = 0b0100;
 export const FLAG_DEMO = 0b1000;
+export const FLAG_ENCRYPTED = 0b1_0000;
+
+export type Channel = "sound" | "light" | "file" | "tamper";

@@ -1,6 +1,6 @@
 [package]
 name = "ghostpacket-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "GhostPacket core: compact signed frames, 4-FSK acoustic modem and Luby Transform optical fountain, compiled to WebAssembly."
 license = "MIT"
@@ -21,6 +21,11 @@ crc32fast = { version = "1", default-features = false }
 ed25519-dalek = { version = "2", default-features = false, features = ["fast", "zeroize"] }
 rustfft = { version = "6", default-features = false }
 sha2 = { version = "0.10", default-features = false }
+# Optional end-to-end encryption (FLAG_ENCRYPTED). No getrandom: the salt comes from the caller.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+# Already in the tree via ed25519-dalek; wipes derived keys and decrypted plaintext.
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 

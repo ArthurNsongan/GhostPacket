@@ -102,16 +102,34 @@ export class Core {
     return attempt("key_info", () => wasm.key_info(seed) as KeyInfo);
   }
 
-  encode(draft: DocumentDraft, seed: Uint8Array, flags: number): Result<EncodedFrame> {
+  /**
+   * Seals a document. With `passphrase`, the payload is encrypted
+   * (ChaCha20-Poly1305) under a fresh random salt; the salt never repeats, so
+   * neither does the key/nonce pair.
+   */
+  encode(draft: DocumentDraft, seed: Uint8Array, flags: number, passphrase?: string): Result<EncodedFrame> {
+    passphrase = normalizePassphrase(passphrase);
+    if (passphrase) {
+      const salt = new Uint8Array(this.limits.saltLen);
+      crypto.getRandomValues(salt);
+      return attempt("encode_encrypted", () => wasm.encode_document(draft, seed, flags, passphrase, salt) as EncodedFrame);
+    }
     return attempt("encode", () => wasm.encode_document(draft, seed, flags) as EncodedFrame);
   }
 
-  verify(frame: Uint8Array, trustedHex: string[] = []): Result<VerifiedFrame> {
-    return attempt("verify", () => wasm.decode_frame(frame, trustedHex) as VerifiedFrame);
+  verify(frame: Uint8Array, trustedHex: string[] = [], passphrase?: string): Result<VerifiedFrame> {
+    passphrase = normalizePassphrase(passphrase);
+    return attempt(passphrase ? "verify_encrypted" : "verify", () => wasm.decode_frame(frame, trustedHex, passphrase || undefined) as VerifiedFrame);
   }
 
-  inspect(frame: Uint8Array): FrameInspection {
-    return timed("inspect", () => wasm.inspect_frame(frame) as FrameInspection);
+  inspect(frame: Uint8Array, passphrase?: string): FrameInspection {
+    passphrase = normalizePassphrase(passphrase);
+    return timed("inspect", () => wasm.inspect_frame(frame, passphrase || undefined) as FrameInspection);
+  }
+
+  /** Fingerprint of a hex public key; fails on strings that are not a valid Ed25519 point. */
+  fingerprintOf(publicKeyHex: string): Result<string> {
+    return attempt("fingerprint_of", () => wasm.fingerprint_of(publicKeyHex));
   }
 
   flipBit(frame: Uint8Array, byte: number, bit: number): Result<Uint8Array> {
@@ -185,6 +203,14 @@ export class FountainReceiver {
   free(): void {
     this.inner.free();
   }
+}
+
+/**
+ * NFC-normalized passphrase: a phone and a PC may encode "é" differently
+ * (NFC vs NFD); without this the same typed passphrase would derive another key.
+ */
+export function normalizePassphrase(p: string | undefined): string | undefined {
+  return p ? p.normalize("NFC") : undefined;
 }
 
 export function toHex(bytes: Uint8Array): string {

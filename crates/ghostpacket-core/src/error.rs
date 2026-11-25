@@ -25,6 +25,10 @@ pub enum GhostError {
     FieldTooLong { field: &'static str, len: usize, max: usize },
     TooManyItems { len: usize, max: usize },
     // --- Crypto -----------------------------------------------------------
+    PassphraseRequired,
+    PassphraseTooLong { len: usize },
+    InvalidSalt { len: usize },
+    DecryptionFailed,
     InvalidSeed { len: usize },
     InvalidPublicKey,
     InvalidSignature,
@@ -67,6 +71,10 @@ impl GhostError {
             GhostError::SchemaDecodeFailed => "SCHEMA_DECODE_FAILED",
             GhostError::FieldTooLong { .. } => "FIELD_TOO_LONG",
             GhostError::TooManyItems { .. } => "TOO_MANY_ITEMS",
+            GhostError::PassphraseRequired => "PASSPHRASE_REQUIRED",
+            GhostError::PassphraseTooLong { .. } => "PASSPHRASE_TOO_LONG",
+            GhostError::InvalidSalt { .. } => "INVALID_SALT",
+            GhostError::DecryptionFailed => "DECRYPTION_FAILED",
             GhostError::InvalidSeed { .. } => "INVALID_SEED",
             GhostError::InvalidPublicKey => "INVALID_PUBLIC_KEY",
             GhostError::InvalidSignature => "INVALID_SIGNATURE",
@@ -129,6 +137,19 @@ impl fmt::Display for GhostError {
             GhostError::TooManyItems { len, max } => {
                 write!(f, "Too many line items: {len} (max {max})")
             }
+            GhostError::PassphraseRequired => {
+                write!(f, "Encrypted frame: a passphrase is required to open it")
+            }
+            GhostError::PassphraseTooLong { len } => {
+                write!(f, "Passphrase too long: {len} bytes (max 128)")
+            }
+            GhostError::InvalidSalt { len } => {
+                write!(f, "Invalid encryption salt: {len} bytes (expected 16)")
+            }
+            GhostError::DecryptionFailed => write!(
+                f,
+                "Decryption failed: wrong passphrase or altered ciphertext (ChaCha20-Poly1305)"
+            ),
             GhostError::InvalidSeed { len } => {
                 write!(f, "Invalid Ed25519 seed: {len} bytes (expected 32)")
             }

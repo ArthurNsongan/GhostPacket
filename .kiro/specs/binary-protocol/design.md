@@ -5,15 +5,17 @@
 Offset   Size     Field              Value
 0        4        Sync               0x47 0x50 0x4B 0x54 ("GPKT")
 4        1        Version            0x01
-5        1        Flags              b0 LZ4 | b1 FSK | b2 FOUNTAIN | b3 DEMO | b4..b7 = 0
+5        1        Flags              b0 LZ4 | b1 FSK | b2 FOUNTAIN | b3 DEMO | b4 ENCRYPTED | b5..b7 = 0
 6        2        Length N           u16 BE, 1 ≤ N ≤ 436
-8        N        Payload            postcard(GhostDocument), LZ4 if b0
+8        N        Payload            postcard(GhostDocument), LZ4 if b0, sealed if b4
 8+N      4        CRC32              u32 BE, crc32fast(frame[0..8+N])
 12+N     64       Signature          Ed25519(frame[0..12+N])
 Total    76 + N ≤ 512
 ```
 
 LZ4 payload (if b0): `[decompressed size u32 LE][LZ4 block]`.
+
+Encrypted payload (if b4, V2): `[salt 16][ChaCha20-Poly1305 ciphertext of the (LZ4 or raw) payload][tag 16]`. Key ‖ nonce = PBKDF2-HMAC-SHA256(NFC(passphrase), salt, 40 000 iterations) → 32 + 12 bytes; AAD = bytes 0..8. The salt is supplied fresh by the caller for every frame. Callers cannot set b0 or b4 themselves (`INVALID_FLAGS`). Details and measurements: `.kiro/specs/platform-v2/design.md`.
 
 ## Document
 ```rust
@@ -27,9 +29,10 @@ enum DocumentBody {
     TontineReceipt { group, member, collector, amount_minor: u64, currency, cycle: u16, note },        // 0x01
     MedicalPrescription { clinic, practitioner, patient_ref, items: Vec<{drug, dosage, days}>, note }, // 0x02
     EmergencyVoucher { program, distributor, beneficiary_ref, items: Vec<{label, quantity, unit}>, valid_until: u64, note }, // 0x03
+    CustomMessage { sender, title, message },                                                       // 0x04 (V2, must stay last)
 }
 ```
-Bounds: fields ≤ 64 B, `currency` ≤ 8 B, `unit` ≤ 16 B, `note` ≤ 120 B, `items` ≤ 8.
+Bounds: fields ≤ 64 B, `currency` ≤ 8 B, `unit` ≤ 16 B, `note` ≤ 120 B, `items` ≤ 8. Custom message: `sender` ≤ 48 B, `title` ≤ 60 B, `message` ≤ 240 B, so the worst case fits in 511 B even encrypted.
 
 ## Measured sizes (presets, `cargo test --test protocol_vectors -- --nocapture`)
 | Preset | postcard | Payload | Frame |
@@ -48,7 +51,8 @@ flowchart TD
     B --> C[Version 0x01, reserved bits 0] -->|no| E3[UNSUPPORTED_VERSION / INVALID_FLAGS]
     C --> D[76 + N == size] -->|no| E4[LENGTH_MISMATCH]
     D --> F[CRC32] -->|no| E5[CRC32_MISMATCH]
-    F --> G[LZ4 bounded to 4096] -->|no| E6[DECOMPRESSED_TOO_LARGE / LZ4_DECOMPRESSION_FAILED]
+    F --> X[Decrypt if b4] -->|no| EX[PASSPHRASE_REQUIRED / DECRYPTION_FAILED]
+    X --> G[LZ4 bounded to 4096] -->|no| E6[DECOMPRESSED_TOO_LARGE / LZ4_DECOMPRESSION_FAILED]
     G --> H[postcard + bounds] -->|no| E7[SCHEMA_DECODE_FAILED / FIELD_TOO_LONG]
     H --> I[Keyring] -->|no| E8[UNTRUSTED_ISSUER]
     I --> J[Strict Ed25519] -->|no| E9[INVALID_SIGNATURE]
@@ -65,7 +69,8 @@ flowchart TD
 | Function | Returns |
 |---|---|
 | `key_info(seed)` | `{ publicKeyHex, fingerprint }` |
-| `encode_document(draft, seed, flags)` | metadata + `frame: Uint8Array` |
-| `decode_frame(frame, trustedHex[])` | `VerifiedFrame` or `{ code, message }` |
-| `inspect_frame(frame)` | `{ fields[], ok, errorCode, errorMessage }` |
+| `encode_document(draft, seed, flags, passphrase?, salt?)` | metadata (incl. `encrypted`) + `frame: Uint8Array` |
+| `decode_frame(frame, trustedHex[], passphrase?)` | `VerifiedFrame` or `{ code, message }` (keyring ≤ 256 keys) |
+| `inspect_frame(frame, passphrase?)` | `{ fields[], ok, errorCode, errorMessage }` |
+| `fingerprint_of(publicKeyHex)` | `GPKT-XXXX-XXXX`, rejects invalid Ed25519 points |
 | `flip_bit(frame, byte, bit)` | altered copy |

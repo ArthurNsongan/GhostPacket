@@ -15,6 +15,15 @@ pub const MAX_ITEMS: usize = 8;
 pub const DOC_TYPE_TONTINE: u8 = 0x01;
 pub const DOC_TYPE_PRESCRIPTION: u8 = 0x02;
 pub const DOC_TYPE_VOUCHER: u8 = 0x03;
+pub const DOC_TYPE_MESSAGE: u8 = 0x04;
+
+/// Bounds of a free-form message. Worst case (incompressible text at every
+/// bound, 10-byte timestamp varint) serializes to 403 bytes: with the 32 bytes
+/// of encryption overhead that is 435 ≤ 436, so any valid message ships.
+/// (A 64-byte title would overshoot by 3 bytes, hence 60.)
+pub const MAX_SENDER_BYTES: usize = 48;
+pub const MAX_TITLE_BYTES: usize = 60;
+pub const MAX_MESSAGE_BYTES: usize = 240;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +72,14 @@ pub enum DocumentBody {
         valid_until: u64,
         note: String,
     },
+    /// Free-form signed message typed by the user. Must stay the last variant:
+    /// postcard encodes the variant index, so reordering would break old frames.
+    #[serde(rename_all = "camelCase")]
+    CustomMessage {
+        sender: String,
+        title: String,
+        message: String,
+    },
 }
 
 impl DocumentBody {
@@ -71,6 +88,7 @@ impl DocumentBody {
             DocumentBody::TontineReceipt { .. } => DOC_TYPE_TONTINE,
             DocumentBody::MedicalPrescription { .. } => DOC_TYPE_PRESCRIPTION,
             DocumentBody::EmergencyVoucher { .. } => DOC_TYPE_VOUCHER,
+            DocumentBody::CustomMessage { .. } => DOC_TYPE_MESSAGE,
         }
     }
 }
@@ -160,6 +178,15 @@ impl GhostDocument {
                     check_field("unit", &item.unit, 16)?;
                 }
                 check_field("note", note, MAX_NOTE_BYTES)?;
+            }
+            DocumentBody::CustomMessage {
+                sender,
+                title,
+                message,
+            } => {
+                check_field("sender", sender, MAX_SENDER_BYTES)?;
+                check_field("title", title, MAX_TITLE_BYTES)?;
+                check_field("message", message, MAX_MESSAGE_BYTES)?;
             }
         }
         Ok(())

@@ -1,0 +1,30 @@
+# Implementation plan — Platform V2
+
+- [x] 1. Kiro foundation
+  - [x] 1.1 Spec `platform-v2` (EARS requirements, design, tasks)
+  - [x] 1.2 Custom agent `.kiro/agents/dsp-security-auditor.md` (read-only reviewer)
+  - [x] 1.3 Steering `ui-design-system`, `tech`, `structure` updated
+  - _Requirements: 11.2_
+- [x] 2. Rust core
+  - [x] 2.1 `DocumentBody::CustomMessage` (doc type 0x04) + bound tests
+  - [x] 2.2 `encryption.rs`: ChaCha20-Poly1305 + PBKDF2, `FLAG_ENCRYPTED`, `PASSPHRASE_REQUIRED` / `DECRYPTION_FAILED` / `INVALID_SALT` / `PASSPHRASE_TOO_LONG`
+  - [x] 2.3 WASM API: optional passphrase on encode/decode/inspect, `fingerprint_of`
+  - [x] 2.4 51 tests, clippy clean, 0 forbidden call, WASM 252 KB gzip
+  - _Requirements: 2.1–2.3, 3.1–3.3, 3.6_
+- [x] 3. Web libraries
+  - [x] 3.1 `sdk.ts`, `ledger.ts`, `keyring.ts`, `messages.ts`, `ui-sfx.ts`, `effects.ts`, `tamper-lab.ts`, `chimera.ts`, `offline.ts`
+  - [x] 3.2 `public/sw.js` + AIR-GAP badge
+  - [x] 3.3 Squelch, ≥ 50 kHz decimation, no DEMO flag in field mode, droplet re-ingest on new session
+  - _Requirements: 5.*, 6.*, 7.1, 8.*, 10.*_
+- [x] 4. Four-page site
+  - [x] 4.1 `AppShell`, `trailingSlash`, `fix-next-export.mjs`
+  - [x] 4.2 Home, How It Works (pipeline, threat model, SDK hub, `.gpkt` verifier)
+  - [x] 4.3 Simulation (composer, E2EE, Ether Conduit, Chimera race, tamper lab, Blood Moon, ledger)
+  - [x] 4.4 Test (message, E2EE, identity QR, keyring, ledger, unlock with passphrase)
+  - _Requirements: 1.*, 2.4, 3.4, 3.5, 4.*, 9.*, 11.*_
+- [x] 5. Verification
+  - [x] 5.1 Headless Chrome, 26 checks (pages, demo < 20 s, E2EE, tamper, replay, race, verifier, field mic/camera, offline, 0 error / external request / 404)
+  - [x] 5.2 Security review by `dsp-security-auditor`, findings fixed
+  - [x] 5.3 Deployed to GitHub Pages (`node scripts/deploy-gh-pages.mjs`)
+  - [ ] 5.4 Physical PC ↔ phone test in airplane mode and 3-minute video
+  - _Requirements: all_

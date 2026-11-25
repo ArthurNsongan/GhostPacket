@@ -18,7 +18,10 @@ export const DEMO_STEPS: { id: Exclude<DemoStep, "idle" | "failed">; label: stri
 export interface DemoSettings {
   draft: DocumentDraft;
   seed: Uint8Array;
-  trustedHex: string[];
+  /** Optional end-to-end encryption of the payload. */
+  passphrase?: string;
+  /** Full verification (keyring, passphrase, anti-replay ledger) for a received frame. */
+  verify: (frame: Uint8Array, channel: "sound" | "light") => Result<VerifiedFrame>;
   snrDb: number;
   dropPct: number;
   fps: number;
@@ -55,7 +58,7 @@ export interface DemoSummary {
 export const DEMO_FLAGS = FLAG_FSK | FLAG_FOUNTAIN | FLAG_DEMO;
 
 /** Flips one payload bit: the CRC32 catches it before the signature check. */
-export function tamper(core: Core, frame: Uint8Array): TamperOutcome | null {
+export function tamper(core: Core, frame: Uint8Array, passphrase?: string): TamperOutcome | null {
   const n = frame.length - 76;
   const byte = 8 + Math.floor(n / 2);
   const bit = 3;
@@ -65,8 +68,8 @@ export function tamper(core: Core, frame: Uint8Array): TamperOutcome | null {
     frame: flipped.value,
     byte,
     bit,
-    inspection: core.inspect(flipped.value),
-    verification: core.verify(flipped.value),
+    inspection: core.inspect(flipped.value, passphrase),
+    verification: core.verify(flipped.value, [], passphrase),
   };
 }
 
@@ -78,7 +81,7 @@ export async function runFullDemo(core: Core, s: DemoSettings, cb: DemoCallbacks
   };
 
   cb.onStep("encode");
-  const enc = core.encode(s.draft, s.seed, DEMO_FLAGS);
+  const enc = core.encode(s.draft, s.seed, DEMO_FLAGS, s.passphrase);
   cb.onEncoded(enc);
   if (!enc.ok) return fail("encode", `${enc.error.code}: ${enc.error.message}`);
   const frame = enc.value.frame;
@@ -93,7 +96,7 @@ export async function runFullDemo(core: Core, s: DemoSettings, cb: DemoCallbacks
     signal: s.signal,
     onTick: cb.onAcousticTick,
   });
-  const aVerify = acoustic.result.ok ? core.verify(acoustic.result.value.frame, s.trustedHex) : null;
+  const aVerify = acoustic.result.ok ? s.verify(acoustic.result.value.frame, "sound") : null;
   cb.onAcousticDone(acoustic, aVerify);
   if (!acoustic.result.ok) return fail("acoustic", `${acoustic.result.error.code}: ${acoustic.result.error.message}`);
   if (!aVerify?.ok) return fail("acoustic", aVerify ? `${aVerify.error.code}: ${aVerify.error.message}` : "verification unavailable");
@@ -107,14 +110,14 @@ export async function runFullDemo(core: Core, s: DemoSettings, cb: DemoCallbacks
     signal: s.signal,
     onTick: cb.onOpticalTick,
   });
-  const oVerify = optical.result.ok ? core.verify(optical.result.value, s.trustedHex) : null;
+  const oVerify = optical.result.ok ? s.verify(optical.result.value, "light") : null;
   cb.onOpticalDone(optical, oVerify);
   if (!optical.result.ok) return fail("optical", `${optical.result.error.code}: ${optical.result.error.message}`);
   if (!oVerify?.ok) return fail("optical", oVerify ? `${oVerify.error.code}: ${oVerify.error.message}` : "verification unavailable");
   await pause(400, s.signal);
 
   cb.onStep("tamper");
-  const t = tamper(core, frame);
+  const t = tamper(core, frame, s.passphrase);
   if (!t) return fail("tamper", "flip_bit failed");
   cb.onTamper(t);
   if (t.verification.ok) return fail("tamper", "The corrupted frame was accepted");

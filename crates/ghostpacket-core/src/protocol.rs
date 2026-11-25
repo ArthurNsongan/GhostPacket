@@ -15,8 +15,10 @@
 use serde::Serialize;
 
 use crate::crypto::{self, Keypair, PUBLIC_KEY_LEN, SIGNATURE_LEN};
+use crate::encryption::{self, ENCRYPTION_OVERHEAD};
 use crate::error::GhostError;
 use crate::schema::{DocumentDraft, GhostDocument};
+use zeroize::Zeroizing;
 
 pub const PREAMBLE: [u8; 4] = *b"GPKT";
 pub const VERSION: u8 = 0x01;
@@ -32,9 +34,16 @@ pub const FLAG_LZ4: u8 = 0b0000_0001;
 pub const FLAG_FSK: u8 = 0b0000_0010;
 pub const FLAG_FOUNTAIN: u8 = 0b0000_0100;
 pub const FLAG_DEMO: u8 = 0b0000_1000;
-pub const FLAGS_RESERVED: u8 = 0b1111_0000;
-/// Flags a caller may request; LZ4 is decided by the encoder.
+pub const FLAG_ENCRYPTED: u8 = 0b0001_0000;
+pub const FLAGS_RESERVED: u8 = 0b1110_0000;
+/// Flags a caller may request; LZ4 and ENCRYPTED are decided by the encoder.
 pub const FLAGS_CALLER: u8 = FLAG_FSK | FLAG_FOUNTAIN | FLAG_DEMO;
+
+/// Passphrase and fresh 16-byte salt for an encrypted frame.
+pub struct Encryption<'a> {
+    pub passphrase: &'a [u8],
+    pub salt: &'a [u8],
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +54,7 @@ pub struct EncodedFrame {
     pub serialized_len: usize,
     pub payload_len: usize,
     pub compressed: bool,
+    pub encrypted: bool,
     pub flags: u8,
     pub crc32: u32,
     pub issuer_pubkey_hex: String,
@@ -60,6 +70,7 @@ pub struct VerifiedFrame {
     pub payload_len: usize,
     pub decompressed_len: usize,
     pub compressed: bool,
+    pub encrypted: bool,
     pub flags: u8,
     pub crc32: u32,
     pub issuer_pubkey_hex: String,
@@ -67,11 +78,23 @@ pub struct VerifiedFrame {
     pub trusted_issuer: bool,
 }
 
-/// Builds, compresses, checksums and signs a frame.
+/// Builds, compresses, checksums and signs a plaintext frame.
 pub fn encode_frame(
     draft: DocumentDraft,
     signing_seed: &[u8],
     caller_flags: u8,
+) -> Result<EncodedFrame, GhostError> {
+    encode_frame_with(draft, signing_seed, caller_flags, None)
+}
+
+/// Builds a frame, optionally encrypting the payload, then checksums and signs
+/// it. The signature covers the ciphertext, so a receiver without the
+/// passphrase can still reject a tampered frame by its CRC32.
+pub fn encode_frame_with(
+    draft: DocumentDraft,
+    signing_seed: &[u8],
+    caller_flags: u8,
+    encryption: Option<Encryption<'_>>,
 ) -> Result<EncodedFrame, GhostError> {
     if caller_flags & !FLAGS_CALLER != 0 {
         return Err(GhostError::InvalidFlags {
@@ -89,25 +112,36 @@ pub fn encode_frame(
     }
 
     let compressed_payload = compress_payload(&serialized)?;
-    let (payload, compressed) = if compressed_payload.len() < serialized.len() {
+    let (inner, compressed) = if compressed_payload.len() < serialized.len() {
         (compressed_payload, true)
     } else {
         (serialized.clone(), false)
     };
-    if payload.is_empty() {
+    if inner.is_empty() {
         return Err(GhostError::PayloadEmpty);
     }
-    if payload.len() > MAX_PAYLOAD_LEN {
-        return Err(GhostError::PayloadTooLarge { len: payload.len() });
-    }
 
-    let n = payload.len();
-    let flags = caller_flags | if compressed { FLAG_LZ4 } else { 0 };
+    let encrypted = encryption.is_some();
+    let n = inner.len() + if encrypted { ENCRYPTION_OVERHEAD } else { 0 };
+    // Size is checked before encrypting: nothing is spent on a frame that cannot ship.
+    if n > MAX_PAYLOAD_LEN {
+        return Err(GhostError::PayloadTooLarge { len: n });
+    }
+    let flags = caller_flags
+        | if compressed { FLAG_LZ4 } else { 0 }
+        | if encrypted { FLAG_ENCRYPTED } else { 0 };
     let mut frame = Vec::with_capacity(OVERHEAD + n);
     frame.extend_from_slice(&PREAMBLE);
     frame.push(VERSION);
     frame.push(flags);
     frame.extend_from_slice(&(n as u16).to_be_bytes());
+    let payload = match encryption {
+        Some(e) => encryption::seal(&inner, &frame, e.passphrase, e.salt)?,
+        None => inner,
+    };
+    if payload.len() != n {
+        return Err(GhostError::InvalidArgument { what: "sealed payload length" });
+    }
     frame.extend_from_slice(&payload);
     let crc = crc32fast::hash(&frame);
     frame.extend_from_slice(&crc.to_be_bytes());
@@ -120,6 +154,7 @@ pub fn encode_frame(
         serialized_len: serialized.len(),
         payload_len: n,
         compressed,
+        encrypted,
         flags,
         crc32: crc,
         issuer_pubkey_hex: crypto::to_hex(&pubkey),
@@ -127,12 +162,23 @@ pub fn encode_frame(
     })
 }
 
-/// Verifies a frame in the order fixed by the spec and returns the document.
-///
-/// If `trusted` is non-empty, the issuer key must be one of them.
+/// Verifies a plaintext frame (an encrypted one gives `PASSPHRASE_REQUIRED`).
 pub fn decode_and_verify_frame(
     frame: &[u8],
     trusted: &[[u8; PUBLIC_KEY_LEN]],
+) -> Result<VerifiedFrame, GhostError> {
+    decode_and_verify_frame_with(frame, trusted, None)
+}
+
+/// Verifies a frame in the order fixed by the spec and returns the document:
+/// size → preamble → version/flags → length → CRC32 → decrypt (if encrypted)
+/// → bounded LZ4 → schema → keyring → strict Ed25519.
+///
+/// If `trusted` is non-empty, the issuer key must be one of them.
+pub fn decode_and_verify_frame_with(
+    frame: &[u8],
+    trusted: &[[u8; PUBLIC_KEY_LEN]],
+    passphrase: Option<&[u8]>,
 ) -> Result<VerifiedFrame, GhostError> {
     let header = check_structure(frame)?;
     let n = header.payload_len;
@@ -148,11 +194,19 @@ pub fn decode_and_verify_frame(
     }
 
     let payload = slice(frame, HEADER_LEN, crc_offset)?;
+    let encrypted = header.flags & FLAG_ENCRYPTED != 0;
+    // Decrypted bytes are wiped on drop, including when a later step rejects the frame.
+    let inner = if encrypted {
+        let pass = passphrase.ok_or(GhostError::PassphraseRequired)?;
+        encryption::open(payload, slice(frame, 0, HEADER_LEN)?, pass)?
+    } else {
+        Zeroizing::new(payload.to_vec())
+    };
     let compressed = header.flags & FLAG_LZ4 != 0;
     let serialized = if compressed {
-        decompress_payload(payload)?
+        Zeroizing::new(decompress_payload(&inner)?)
     } else {
-        payload.to_vec()
+        inner
     };
 
     let document = GhostDocument::from_bytes(&serialized)?;
@@ -173,6 +227,7 @@ pub fn decode_and_verify_frame(
         payload_len: n,
         decompressed_len: serialized.len(),
         compressed,
+        encrypted,
         flags: header.flags,
         crc32: expected_crc,
         issuer_pubkey_hex: crypto::to_hex(&issuer),
@@ -280,6 +335,11 @@ pub struct FrameInspection {
 
 /// Splits a frame into its fields for the hex inspector, flagging each one.
 pub fn inspect_frame(frame: &[u8]) -> FrameInspection {
+    inspect_frame_with(frame, None)
+}
+
+/// Same as [`inspect_frame`], opening encrypted payloads with `passphrase`.
+pub fn inspect_frame_with(frame: &[u8], passphrase: Option<&[u8]>) -> FrameInspection {
     let len = frame.len();
     let mut fields = Vec::new();
 
@@ -314,6 +374,9 @@ pub fn inspect_frame(frame: &[u8]) -> FrameInspection {
         if f & FLAG_DEMO != 0 {
             names.push("DEMO");
         }
+        if f & FLAG_ENCRYPTED != 0 {
+            names.push("ENC");
+        }
         fields.push(FieldSpan {
             name: "flags",
             offset: 5,
@@ -336,12 +399,17 @@ pub fn inspect_frame(frame: &[u8]) -> FrameInspection {
         });
         let payload_end = (HEADER_LEN + n).min(len);
         if payload_end > HEADER_LEN {
+            let enc = frame.get(5).is_some_and(|f| f & FLAG_ENCRYPTED != 0);
             fields.push(FieldSpan {
                 name: "payload",
                 offset: HEADER_LEN,
                 len: payload_end - HEADER_LEN,
                 valid: None,
-                detail: format!("{} bytes", payload_end - HEADER_LEN),
+                detail: if enc {
+                    format!("{} bytes · ENC ChaCha20-Poly1305", payload_end - HEADER_LEN)
+                } else {
+                    format!("{} bytes", payload_end - HEADER_LEN)
+                },
             });
         }
         let crc_off = HEADER_LEN + n;
@@ -368,7 +436,7 @@ pub fn inspect_frame(frame: &[u8]) -> FrameInspection {
         }
     }
 
-    let result = decode_and_verify_frame(frame, &[]);
+    let result = decode_and_verify_frame_with(frame, &[], passphrase);
     let (ok, code, message) = match &result {
         Ok(_) => (true, None, None),
         Err(e) => (false, Some(e.code()), Some(e.to_string())),
@@ -385,7 +453,8 @@ pub fn inspect_frame(frame: &[u8]) -> FrameInspection {
         field.valid = match &result {
             Ok(_) => Some(true),
             Err(
-                GhostError::Lz4DecompressionFailed
+                GhostError::DecryptionFailed
+                | GhostError::Lz4DecompressionFailed
                 | GhostError::DecompressedTooLarge { .. }
                 | GhostError::SchemaDecodeFailed
                 | GhostError::FieldTooLong { .. }

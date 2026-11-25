@@ -236,3 +236,153 @@ fn inspector_flags_the_broken_field() {
     let crc = report.fields.iter().find(|f| f.name == "crc32").unwrap();
     assert_eq!(crc.valid, Some(false));
 }
+
+// --- V2: custom messages and end-to-end encryption ------------------------------
+
+use ghostpacket_core::protocol::{decode_and_verify_frame_with, encode_frame_with, inspect_frame_with, Encryption, FLAG_ENCRYPTED};
+
+const SALT: [u8; 16] = [0x5A; 16];
+const PASS: &[u8] = b"baobab-moon-2026";
+
+fn max_message() -> DocumentDraft {
+    DocumentDraft {
+        doc_id: *b"MSG-0001",
+        timestamp: u64::MAX,
+        // High-entropy text so LZ4 cannot help: worst case for the size budget.
+        body: DocumentBody::CustomMessage {
+            sender: noise_text(&mut Xorshift64Star::new(1), 48),
+            title: noise_text(&mut Xorshift64Star::new(2), 60),
+            message: noise_text(&mut Xorshift64Star::new(3), 240),
+        },
+    }
+}
+
+fn encrypt(draft: DocumentDraft) -> ghostpacket_core::protocol::EncodedFrame {
+    encode_frame_with(draft, &SEED_A, DEMO_FLAGS, Some(Encryption { passphrase: PASS, salt: &SALT })).unwrap()
+}
+
+#[test]
+fn custom_message_roundtrip_has_doc_type_4() {
+    let draft = DocumentDraft {
+        doc_id: *b"MSG-0042",
+        timestamp: TIMESTAMP,
+        body: DocumentBody::CustomMessage {
+            sender: "Fatou Ndiaye".into(),
+            title: "Meeting moved".into(),
+            message: "The tontine meets Saturday at 10:00 under the baobab.".into(),
+        },
+    };
+    let enc = encode(draft.clone());
+    let ok = decode_and_verify_frame(&enc.bytes, &[]).unwrap();
+    assert_eq!(ok.doc_type, 0x04);
+    assert_eq!(ok.document.body, draft.body);
+}
+
+#[test]
+fn custom_message_bounds_are_enforced() {
+    for (field, sender, title, message) in [
+        ("sender", 49, 1, 1),
+        ("title", 1, 61, 1),
+        ("message", 1, 1, 241),
+    ] {
+        let draft = DocumentDraft {
+            doc_id: *b"MSG-0002",
+            timestamp: TIMESTAMP,
+            body: DocumentBody::CustomMessage {
+                sender: "a".repeat(sender),
+                title: "b".repeat(title),
+                message: "c".repeat(message),
+            },
+        };
+        match encode_frame(draft, &SEED_A, 0) {
+            Err(GhostError::FieldTooLong { field: f, .. }) => assert_eq!(f, field),
+            other => panic!("{field}: expected FIELD_TOO_LONG, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn largest_encrypted_custom_message_fits_512_bytes() {
+    let enc = encrypt(max_message());
+    println!("max encrypted message: payload {} B, frame {} B", enc.payload_len, enc.frame_len);
+    assert!(enc.frame_len <= MAX_FRAME_SIZE);
+    assert!(enc.encrypted && enc.flags & FLAG_ENCRYPTED != 0);
+    let ok = decode_and_verify_frame_with(&enc.bytes, &[], Some(PASS)).unwrap();
+    assert!(ok.encrypted);
+    assert_eq!(ok.document.body, max_message().body);
+}
+
+#[test]
+fn encrypted_frame_hides_plaintext_and_needs_the_passphrase() {
+    let enc = encrypt(tontine());
+    let needle = b"Aminata";
+    assert!(!enc.bytes.windows(needle.len()).any(|w| w == needle), "plaintext leaked");
+    assert_eq!(decode_and_verify_frame(&enc.bytes, &[]).unwrap_err(), GhostError::PassphraseRequired);
+    assert_eq!(
+        decode_and_verify_frame_with(&enc.bytes, &[], Some(b"wrong")).unwrap_err(),
+        GhostError::DecryptionFailed
+    );
+    let ok = decode_and_verify_frame_with(&enc.bytes, &[], Some(PASS)).unwrap();
+    assert_eq!(ok.document.body, tontine().body);
+}
+
+#[test]
+fn encrypted_frames_reject_every_single_bit_flip() {
+    let frame = encrypt(voucher()).bytes;
+    for byte in 0..frame.len() {
+        for bit in 0..8u8 {
+            let bad = flip_bit(&frame, byte, bit).unwrap();
+            assert!(
+                decode_and_verify_frame_with(&bad, &[], Some(PASS)).is_err(),
+                "flip at byte {byte} bit {bit} accepted"
+            );
+        }
+    }
+}
+
+#[test]
+fn tampered_ciphertext_with_fixed_crc_fails_decryption() {
+    let enc = encrypt(prescription());
+    let mut frame = enc.bytes.clone();
+    let n = enc.payload_len;
+    frame[8 + 20] ^= 0x01;
+    let crc = crc32fast::hash(&frame[..8 + n]);
+    frame[8 + n..12 + n].copy_from_slice(&crc.to_be_bytes());
+    assert_eq!(
+        decode_and_verify_frame_with(&frame, &[], Some(PASS)).unwrap_err(),
+        GhostError::DecryptionFailed
+    );
+}
+
+#[test]
+fn caller_cannot_set_the_encrypted_flag_directly() {
+    assert_eq!(
+        encode_frame(tontine(), &SEED_A, FLAG_ENCRYPTED).unwrap_err().code(),
+        "INVALID_FLAGS"
+    );
+}
+
+#[test]
+fn inspector_labels_encrypted_payload() {
+    let enc = encrypt(tontine());
+    let locked = inspect_frame(&enc.bytes);
+    assert_eq!(locked.error_code, Some("PASSPHRASE_REQUIRED"));
+    let payload = locked.fields.iter().find(|f| f.name == "payload").unwrap();
+    assert!(payload.detail.contains("ENC"));
+    assert!(inspect_frame_with(&enc.bytes, Some(PASS)).ok);
+    let wrong = inspect_frame_with(&enc.bytes, Some(b"nope"));
+    assert_eq!(wrong.error_code, Some("DECRYPTION_FAILED"));
+    assert_eq!(wrong.fields.iter().find(|f| f.name == "payload").unwrap().valid, Some(false));
+}
+
+#[test]
+fn encryption_cost_is_within_budget() {
+    let t0 = std::time::Instant::now();
+    let enc = encrypt(tontine());
+    let seal_ms = t0.elapsed().as_secs_f64() * 1000.0;
+    let t1 = std::time::Instant::now();
+    decode_and_verify_frame_with(&enc.bytes, &[], Some(PASS)).unwrap();
+    let open_ms = t1.elapsed().as_secs_f64() * 1000.0;
+    println!("native release: seal {seal_ms:.1} ms, open+verify {open_ms:.1} ms");
+    assert!(seal_ms < 500.0 && open_ms < 500.0);
+}

@@ -19,6 +19,7 @@ crates/ghostpacket-core/
   src/schema.rs            structured documents + postcard serialization
   src/protocol.rs          GPKT frame: LZ4 + CRC32 + Ed25519
   src/crypto.rs            Ed25519, GPKT-XXXX-XXXX fingerprint
+  src/encryption.rs        optional ChaCha20-Poly1305 + PBKDF2 payload encryption
   src/fec.rs               Reed-Solomon GF(256)
   src/fsk.rs               4-CPFSK modulation/demodulation, Goertzel, timing recovery, FFT
   src/fountain.rs          Luby Transform + peeling decoder
@@ -26,7 +27,10 @@ crates/ghostpacket-core/
   tests/                   protocol vectors + channel fuzzing
 mcp-server/                ghostpacket-inspector MCP server (stdio)
 scripts/                   Node scripts called by the hooks
-web/src/lib/               types, presets, wasm-bridge, audio/optical engines, demo runner
+web/src/lib/               types, presets, wasm-bridge, audio/optical engines, demo runner,
+                           sdk (public facade), ledger, keyring, messages, tamper-lab, chimera, offline, effects, ui-sfx
+web/src/app/               4 routes: / · /how-it-works/ · /simulation/ · /test/ (AppShell in layout)
+web/public/sw.js           offline service worker
 web/src/components/        UI components (Dual-Canvas, inspector, field mode, …)
 web/src/wasm/              wasm-pack output (generated, committed)
 ```

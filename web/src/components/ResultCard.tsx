@@ -1,7 +1,13 @@
 "use client";
 
 import type { Result } from "@/lib/wasm-bridge";
+import { useEffect } from "react";
+
+import { bloodMoon } from "@/lib/effects";
+import type { LedgerCheck } from "@/lib/ledger";
+import { docTitle } from "@/lib/messages";
 import type { DocumentBody, VerifiedFrame } from "@/lib/types";
+import { sfx } from "@/lib/ui-sfx";
 
 function amount(minor: number, currency: string): string {
   const decimals = ["XOF", "XAF", "JPY", "GNF", "RWF"].includes(currency) ? 0 : 2;
@@ -22,11 +28,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
-export function docTitle(body: DocumentBody): string {
-  if ("tontineReceipt" in body) return "Tontine receipt";
-  if ("medicalPrescription" in body) return "Prescription";
-  return "Aid voucher";
-}
+export { docTitle };
 
 /** Human view of a document body. */
 export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; docId: number[]; timestamp: number }) {
@@ -63,6 +65,12 @@ export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; d
             }
           />
           <Row k="Note" v={body.medicalPrescription.note} />
+        </>
+      )}
+      {"customMessage" in body && (
+        <>
+          <Row k="From" v={body.customMessage.sender || "—"} />
+          <Row k="Title" v={body.customMessage.title || "—"} />
         </>
       )}
       {"emergencyVoucher" in body && (
@@ -114,11 +122,32 @@ export default function ResultCard({
   verification,
   channel,
   detail,
+  replay,
+  issuerLabel,
+  silent,
 }: {
   verification: Result<VerifiedFrame> | null;
   channel: string;
   detail?: string;
+  /** Anti-replay ledger outcome for this delivery. */
+  replay?: LedgerCheck | null;
+  /** Keyring label of the issuer, if pinned. */
+  issuerLabel?: string | null;
+  /** No Blood Moon / sound (e.g. intermediate states). */
+  silent?: boolean;
 }) {
+  const state = verification ? (verification.ok ? (replay?.status === "replay" ? "replay" : "ok") : "rejected") : null;
+  useEffect(() => {
+    if (silent || !state) return;
+    if (state === "rejected") {
+      bloodMoon();
+      void sfx("rejected");
+    } else if (state === "replay") {
+      void sfx("rejected");
+    } else {
+      void sfx("verified");
+    }
+  }, [state, silent]);
   if (!verification) {
     return (
       <div className="rounded-lg border border-dashed border-grid p-4 text-sm text-mute">
@@ -155,10 +184,25 @@ export default function ResultCard({
         </span>
       </div>
       <p className="mt-1 font-mono text-[11px] text-ion">
-        Issuer {v.fingerprint} {v.trustedIssuer ? "· in keyring" : "· first contact (TOFU)"}
+        Issuer {v.fingerprint} {issuerLabel ? `· ${issuerLabel}` : ""} {v.trustedIssuer ? "· in keyring" : "· first contact (TOFU)"}
+        {v.encrypted && <span className="ml-2 rounded bg-ion/15 px-1.5 py-0.5 text-ion">E2EE · decrypted on this device</span>}
       </p>
+      {replay?.status === "replay" && (
+        <div className="tampered mt-2 rounded-md border border-amber/60 bg-amber/10 px-3 py-2" role="alert">
+          <p className="font-mono text-xs font-bold tracking-widest text-amber">REPLAY DETECTED · ALREADY REDEEMED</p>
+          <p className="text-[12px] text-ink">
+            Same issuer and document id first redeemed via {replay.entry.channel} at {new Date(replay.entry.firstSeen).toLocaleTimeString("en-GB")}. A second presentation must be refused.
+          </p>
+        </div>
+      )}
+      {replay?.status === "first" && <p className="font-mono text-[11px] text-phosphor">First redemption · recorded in the Crypt Ledger</p>}
       {detail && <p className="font-mono text-[11px] text-mute">{detail}</p>}
       <h3 className="mt-3 text-sm font-semibold text-ink">{docTitle(v.document.body)}</h3>
+      {"customMessage" in v.document.body && (
+        <blockquote className="reveal mt-2 whitespace-pre-wrap rounded-md border-l-2 border-phosphor bg-void/60 px-3 py-2 text-[15px] leading-relaxed text-ink">
+          {v.document.body.customMessage.message}
+        </blockquote>
+      )}
       <div className="mt-1">
         <DocumentView body={v.document.body} docId={v.document.docId} timestamp={v.document.timestamp} />
       </div>

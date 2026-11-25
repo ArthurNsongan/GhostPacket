@@ -19,11 +19,14 @@ export default function FrameInspector({
   inspection,
   flipped,
   title,
+  onCurseByte,
 }: {
   frame: Uint8Array | null;
   inspection: FrameInspection | null;
   flipped?: { byte: number; bit: number } | null;
   title: string;
+  /** "Curse any byte": flips one bit of the clicked byte. */
+  onCurseByte?: (byte: number) => void;
 }) {
   const [hover, setHover] = useState<FieldSpan["name"] | null>(null);
 
@@ -89,25 +92,27 @@ export default function FrameInspector({
             const s = f ? FIELD_STYLE[f.name] : FIELD_STYLE.payload;
             const isFlip = flipped?.byte === i;
             const dim = hover && f?.name !== hover;
-            return (
-              <span
-                key={i}
-                title={`#${i} · ${f?.name ?? "?"} · 0x${b.toString(16).padStart(2, "0")}`}
-                className={`rounded-sm text-center ${
-                  isFlip ? "bg-alarm font-bold text-void ring-1 ring-alarm" : `${s.text} ${s.bg} ${dim ? "opacity-25" : ""}`
-                } ${f?.valid === false && !isFlip ? "underline decoration-alarm" : ""}`}
-              >
-                {b.toString(16).padStart(2, "0").toUpperCase()}
+            const cls = `rounded-sm text-center ${
+              isFlip ? "bg-alarm font-bold text-void ring-1 ring-alarm" : `${s.text} ${s.bg} ${dim ? "opacity-25" : ""}`
+            } ${f?.valid === false && !isFlip ? "underline decoration-alarm" : ""}`;
+            const label = `#${i} · ${f?.name ?? "?"} · 0x${b.toString(16).padStart(2, "0")}`;
+            const hex = b.toString(16).padStart(2, "0").toUpperCase();
+            return onCurseByte ? (
+              <button key={i} type="button" title={`${label} · click to curse`} onClick={() => onCurseByte(i)} className={`${cls} cursor-crosshair hover:ring-1 hover:ring-alarm`}>
+                {hex}
+              </button>
+            ) : (
+              <span key={i} title={label} className={cls}>
+                {hex}
               </span>
             );
           })}
         </div>
       </div>
-      {flipped && (
-        <p className="mt-2 font-mono text-[11px] text-mute">
-          Byte #{flipped.byte}, bit {flipped.bit} flipped (in red).
-        </p>
-      )}
+      <p className="mt-2 font-mono text-[11px] text-mute">
+        {flipped ? `Byte #${flipped.byte}, bit ${flipped.bit} flipped (in red). ` : ""}
+        {onCurseByte ? "Click any byte to flip one of its bits and see which defense catches it." : ""}
+      </p>
     </section>
   );
 }

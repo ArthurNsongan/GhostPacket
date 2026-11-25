@@ -8,7 +8,7 @@
   "scripts": {
     "wasm": "wasm-pack build ../crates/ghostpacket-core --target web --release --out-dir ../../web/src/wasm --out-name ghostpacket_core && node ../scripts/copy-wasm.mjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node ../scripts/fix-next-export.mjs out",
     "start": "npx serve out",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"

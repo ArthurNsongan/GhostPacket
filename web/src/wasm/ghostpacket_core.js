@@ -199,16 +199,27 @@ export function crc32(data) {
 }
 
 /**
- * Full verification (structure, CRC32, LZ4, schema, Ed25519).
+ * Full verification (structure, CRC32, decryption, LZ4, schema, keyring, Ed25519).
  * `trusted_hex` is an array of 64-char hex public keys; empty = TOFU mode.
+ * `passphrase` opens encrypted frames.
  * @param {Uint8Array | number[]} frame
  * @param {any} trusted_hex
+ * @param {string | null} [passphrase]
  * @returns {any}
  */
-export function decode_frame(frame, trusted_hex) {
-    const ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.decode_frame(ptr0, len0, trusted_hex);
+export function decode_frame(frame, trusted_hex, passphrase) {
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.decode_frame(ptr0, len0, trusted_hex, ptr1, len1);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -217,21 +228,63 @@ export function decode_frame(frame, trusted_hex) {
 
 /**
  * Serializes, compresses and signs a document draft.
- * Returns metadata plus `frame: Uint8Array`.
+ * With `passphrase` and a fresh 16-byte `salt`, the payload is encrypted
+ * (ChaCha20-Poly1305, FLAG_ENCRYPTED). Returns metadata plus `frame: Uint8Array`.
  * @param {any} draft
  * @param {Uint8Array | number[]} signing_seed
  * @param {number} flags
+ * @param {string | null} [passphrase]
+ * @param {Uint8Array | number[] | null} [salt]
  * @returns {any}
  */
-export function encode_document(draft, signing_seed, flags) {
-    const val2 = +flags;
-    const ptr0 = passArray8ToWasm0(signing_seed, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.encode_document(draft, ptr0, len0, val2);
+export function encode_document(draft, signing_seed, flags, passphrase, salt) {
+    const val4 = +flags;
+    let ptr0, len0, ptr1, len1, ptr2, len2;
+    try {
+        ptr0 = passArray8ToWasm0(signing_seed, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+        ptr2 = isLikeNone(salt) ? 0 : passArray8ToWasm0(salt, wasm.__wbindgen_malloc);
+        len2 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.encode_document(draft, ptr0, len0, val4, ptr1, len1, ptr2, len2);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Fingerprint of a 64-char hex Ed25519 public key (keyring / identity QR).
+ * Rejects strings that are not a valid curve point.
+ * @param {string} public_key_hex
+ * @returns {string}
+ */
+export function fingerprint_of(public_key_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.fingerprint_of(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -330,12 +383,22 @@ export function inject_awgn(samples, snr_db, seed) {
 /**
  * Field-by-field dissection for the hex inspector (never fails).
  * @param {Uint8Array | number[]} frame
+ * @param {string | null} [passphrase]
  * @returns {any}
  */
-export function inspect_frame(frame) {
-    const ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.inspect_frame(ptr0, len0);
+export function inspect_frame(frame, passphrase) {
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.inspect_frame(ptr0, len0, ptr1, len1);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -473,6 +536,10 @@ function __wbg_get_imports() {
         },
         __wbg_entries_7bb1459bd9b5c2b9: function(arg0) {
             const ret = Object.entries(arg0);
+            return ret;
+        },
+        __wbg_from_eac91875c8a5ffa4: function(arg0) {
+            const ret = Array.from(arg0);
             return ret;
         },
         __wbg_get_635eea311fa1a291: function() { return handleError(function (arg0, arg1) {

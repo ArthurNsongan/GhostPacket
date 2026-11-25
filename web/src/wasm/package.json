@@ -2,7 +2,7 @@
   "name": "ghostpacket-core",
   "type": "module",
   "description": "GhostPacket core: compact signed frames, 4-FSK acoustic modem and Luby Transform optical fountain, compiled to WebAssembly.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",

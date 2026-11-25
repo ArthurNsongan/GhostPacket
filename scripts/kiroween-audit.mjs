@@ -57,7 +57,8 @@ check(".kiro/ contains steering, specs, hooks and MCP settings", () => {
     ".kiro/hooks/ts-typecheck-on-save.json",
     ".kiro/hooks/kiroween-audit.json",
   ];
-  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui"]) {
+  required.push(".kiro/steering/ui-design-system.md", ".kiro/agents/dsp-security-auditor.md");
+  for (const spec of ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2"]) {
     for (const f of ["requirements.md", "design.md", "tasks.md"]) required.push(`.kiro/specs/${spec}/${f}`);
   }
   const missing = required.filter((f) => !existsSync(join(root, f)));

@@ -15,10 +15,15 @@ export function sessionFor(core: Core, frame: Uint8Array): number {
   return core.crc32(frame) & 0xffff;
 }
 
-/** Renders `text` (uppercase hex = QR alphanumeric mode) on `canvas`. */
+const ALPHANUMERIC = /^[0-9A-Z $%*+\-./:]*$/;
+
+/**
+ * Renders `text` on `canvas`. Uppercase hex (droplets) uses QR alphanumeric
+ * mode (version 3); other text, such as identity QRs with labels, uses byte mode.
+ */
 export function drawQr(canvas: HTMLCanvasElement, text: string, moduleSize = 4, margin = 4): number {
   const qr = qrcode(0, "M");
-  qr.addData(text, "Alphanumeric");
+  qr.addData(text, ALPHANUMERIC.test(text) ? "Alphanumeric" : "Byte");
   qr.make();
   const n = qr.getModuleCount();
   const size = (n + margin * 2) * moduleSize;
@@ -60,6 +65,8 @@ export interface OpticalTick {
 export interface OpticalOptions {
   fps: number;
   dropPct: number;
+  /** Live override of the loss rate (Chimera race sabotage: "Block camera 85 %"). */
+  dropPctNow?: () => number;
   seed: number;
   canvas: HTMLCanvasElement;
   signal?: AbortSignal;
@@ -87,7 +94,8 @@ export async function runOpticalLoopback(core: Core, frame: Uint8Array, opts: Op
   const k = tx.k();
   const rx = core.fountainRx();
   const start = (opts.seed * 7) >>> 0;
-  const maxFrames = k * 10;
+  // At 85 % loss (race sabotage) ~8.5K images are needed on average: allow more.
+  const maxFrames = k * (opts.dropPctNow ? 24 : 10);
   const interval = 1000 / opts.fps;
   let received = 0;
 
@@ -98,7 +106,7 @@ export async function runOpticalLoopback(core: Core, frame: Uint8Array, opts: Op
       const droplet = tx.droplet((start + i) >>> 0);
       const qrText = toHex(droplet);
       const modules = drawQr(opts.canvas, qrText);
-      const dropped = core.isDropped(opts.seed, i, opts.dropPct);
+      const dropped = core.isDropped(opts.seed, i, opts.dropPctNow?.() ?? opts.dropPct);
       const tick: OpticalTick = { index: i, qrText, modules, dropped, unreadable: false };
       if (!dropped) {
         const read = readQrFromCanvas(opts.canvas);
@@ -177,6 +185,8 @@ export class CameraScanner {
     private readonly video: HTMLVideoElement,
     private readonly rx: FountainReceiver,
     private readonly onStep: (step: Result<DropletStep>, text: string) => void,
+    /** Sees every decoded QR first; return true to consume it (e.g. an identity QR). */
+    private readonly onText?: (text: string) => boolean,
   ) {
     const Ctor = (globalThis as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
     if (Ctor) {
@@ -226,8 +236,17 @@ export class CameraScanner {
           text = jsQR(img.data, w, h, { inversionAttempts: "dontInvert" })?.data ?? null;
         }
       }
-      const bytes = text ? fromHex(text) : null;
-      if (text && bytes) this.onStep(this.rx.ingest(bytes), text);
+      if (!text || text.length > 512) return;
+      if (this.onText?.(text)) return;
+      const bytes = fromHex(text);
+      if (!bytes) return;
+      let step = this.rx.ingest(bytes);
+      if (!step.ok && step.error.code === "DROPLET_SESSION_MISMATCH") {
+        // A new transmission started: restart the decoder and keep this droplet.
+        this.rx.reset();
+        step = this.rx.ingest(bytes);
+      }
+      this.onStep(step, text);
     } catch {
       /* transient detector error: try next frame */
     } finally {

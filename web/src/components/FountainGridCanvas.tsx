@@ -43,13 +43,26 @@ export default function FountainGridCanvas({ view }: { view: FountainView }) {
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
+    // Domino cascade: block n of the cascade lights up 35 ms after block n-1.
+    const start = performance.now();
+    const order = view.flash;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf = 0;
+    const frame = () => {
+      const elapsed = performance.now() - start;
+      paint(elapsed, reduced);
+      if (!reduced && elapsed < order.length * 35 + 260) raf = requestAnimationFrame(frame);
+    };
+    const paint = (elapsed: number, still: boolean) => {
     ctx.clearRect(0, 0, c.width, c.height);
     for (let i = 0; i < k; i++) {
       const x = (i % COLS) * (CELL + GAP) + GAP / 2;
       const y = Math.floor(i / COLS) * (CELL + GAP) + GAP / 2;
       const exists = i < view.k;
-      const done = view.decoded[i] ?? false;
-      const flash = view.flash.includes(i);
+      const pos = order.indexOf(i);
+      const flash = pos >= 0 && (still || (elapsed >= pos * 35 && elapsed < pos * 35 + 260));
+      // Blocks of the cascade appear resolved only when their domino falls.
+      const done = (view.decoded[i] ?? false) && (pos < 0 || still || elapsed >= pos * 35);
       ctx.shadowBlur = 0;
       if (!exists) {
         ctx.strokeStyle = "rgba(243,239,230,0.08)";
@@ -75,11 +88,23 @@ export default function FountainGridCanvas({ view }: { view: FountainView }) {
       ctx.textBaseline = "middle";
       ctx.fillText(`B${i}`, x + CELL / 2, y + CELL / 2);
     }
+    };
+    frame();
+    return () => cancelAnimationFrame(raf);
   }, [view, k]);
 
   const resolved = view.decoded.filter(Boolean).length;
+  const cascade = view.flash.length > 1;
   return (
-    <div>
+    <div className="relative">
+      <div className="pointer-events-none absolute right-0 top-0 flex gap-1" aria-live="polite">
+        {cascade && (
+          <span key={`c${view.shown}`} className="seal rounded-full bg-phosphor px-2 py-0.5 font-mono text-[10px] font-bold text-void">
+            CASCADE ×{view.flash.length}
+          </span>
+        )}
+        {view.byElimination && view.complete && <span className="rounded-full bg-ion px-2 py-0.5 font-mono text-[10px] font-bold text-void">GAUSS GF(2)</span>}
+      </div>
       <canvas
         ref={canvas}
         width={COLS * (CELL + GAP)}

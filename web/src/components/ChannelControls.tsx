@@ -1,8 +1,8 @@
 "use client";
 
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
+import EtherConduit, { type ConduitSink } from "./EtherConduit";
 import { DropletStrip, type DropletFate } from "./FountainGridCanvas";
-import { Oscilloscope, type SignalSink } from "./SpectrogramCanvas";
 
 export interface ChannelSettings {
   snrDb: number;
@@ -15,20 +15,19 @@ export interface ChannelSettings {
 export default function ChannelControls({
   settings,
   onChange,
-  onFlip,
-  scopeRef,
+  conduitRef,
+  children,
   fates,
   busy,
-  canFlip,
   acousticProgress,
 }: {
   settings: ChannelSettings;
   onChange: (s: ChannelSettings) => void;
-  onFlip: () => void;
-  scopeRef: Ref<SignalSink>;
+  conduitRef: Ref<ConduitSink>;
+  /** Tamper lab, Chimera race… rendered under the channel settings. */
+  children?: ReactNode;
   fates: DropletFate[];
   busy: boolean;
-  canFlip: boolean;
   acousticProgress: number;
 }) {
   return (
@@ -36,13 +35,18 @@ export default function ChannelControls({
       <h2 id="channel-title" className="panel-title">
         ② Haunt the channel
       </h2>
+      <div>
+        <span className="text-[11px] uppercase tracking-widest text-mute">The Ether Conduit</span>
+        <div className="mt-1">
+          <EtherConduit ref={conduitRef} />
+        </div>
+      </div>
 
       <div className="rounded-lg border border-grid bg-void/40 p-3">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-widest text-mute">Channel A · acoustic air</span>
           <span className="font-mono text-[10px] text-mute">{Math.round(acousticProgress * 100)} %</span>
         </div>
-        <Oscilloscope ref={scopeRef} />
         <div className="mt-1 h-1 overflow-hidden rounded bg-void">
           <div className="h-full bg-phosphor transition-[width] duration-100" style={{ width: `${acousticProgress * 100}%` }} />
         </div>
@@ -119,18 +123,7 @@ export default function ChannelControls({
         </div>
       </div>
 
-      <div className="rounded-lg border border-alarm/40 bg-alarm/5 p-3">
-        <span className="text-[11px] uppercase tracking-widest text-alarm/80">Integrity test (US-03)</span>
-        <p className="mt-1 text-[12px] text-mute">Flips a single payload bit, like a scratch on the signal or a forger.</p>
-        <button
-          type="button"
-          onClick={onFlip}
-          disabled={busy || !canFlip}
-          className="mt-2 w-full rounded-md bg-alarm/90 px-3 py-2 text-sm font-semibold text-void hover:bg-alarm disabled:opacity-40"
-        >
-          Curse 1 bit
-        </button>
-      </div>
+      {children}
     </section>
   );
 }
