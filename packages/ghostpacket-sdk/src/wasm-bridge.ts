@@ -82,8 +82,44 @@ function attempt<T>(op: string, fn: () => T): Result<T> {
 
 let loading: Promise<Core> | null = null;
 
+/** Per-attempt download budgets: a stalled request is aborted and retried instead of waiting forever. */
+const FETCH_TIMEOUTS_MS = [12_000, 25_000, 45_000];
+
 /**
- * Loads the WASM core once. Safe to call from many components.
+ * Downloads the binary and compiles it. In a browser, a URL is fetched here
+ * rather than by wasm-bindgen: a first visit can race the service worker
+ * installing and claiming the page, and a request (or the streaming compile fed
+ * by it) that never settles would leave the app on its loading screen with no
+ * error. Each attempt has a deadline and is retried; compiling from bytes avoids
+ * `instantiateStreaming` (the binary is small). wasm-bindgen then receives a
+ * ready `WebAssembly.Module`, so `init` runs once and cannot be left pending.
+ */
+async function compileFrom(url: string | URL): Promise<WebAssembly.Module> {
+  let lastError: unknown = null;
+  for (const [i, ms] of FETCH_TIMEOUTS_MS.entries()) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(new Error(`no answer after ${ms / 1000} s`)), ms);
+    try {
+      // After a failed attempt, skip the HTTP cache: it may hold the stalled or truncated copy.
+      const r = await fetch(url, { signal: ctrl.signal, cache: i === 0 ? "default" : "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${String(url)}`);
+      const bytes = await r.arrayBuffer();
+      return await WebAssembly.compile(bytes);
+    } catch (e) {
+      lastError = ctrl.signal.aborted ? ctrl.signal.reason : e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const why = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`could not download the WebAssembly core (${FETCH_TIMEOUTS_MS.length} attempts, last: ${why})`);
+}
+
+const inBrowser = typeof window !== "undefined" && typeof fetch === "function";
+
+/**
+ * Loads the WASM core once. Safe to call from many components; after a failure,
+ * the next call tries again.
  * `wasm` overrides the binary location (URL) or provides its bytes (Node, tests).
  */
 export function loadCore(opts: { wasm?: AssetConfig["wasm"] } = {}): Promise<Core> {
@@ -91,11 +127,16 @@ export function loadCore(opts: { wasm?: AssetConfig["wasm"] } = {}): Promise<Cor
   loading ??= (async () => {
     const t0 = performance.now();
     const source = assets().wasm;
-    await init(source === undefined ? undefined : { module_or_path: source });
+    const isUrl = typeof source === "string" || source instanceof URL;
+    const input = inBrowser && isUrl ? await compileFrom(source) : source;
+    await init(input === undefined ? undefined : { module_or_path: input });
     const core = new Core();
     record({ op: "wasm_load", ms: performance.now() - t0, at: Date.now() });
     return core;
   })();
+  loading.catch(() => {
+    loading = null;
+  });
   return loading;
 }
 
