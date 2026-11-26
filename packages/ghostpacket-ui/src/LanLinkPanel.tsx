@@ -38,9 +38,21 @@ function VirtualLan({ frame, onFrame }: { frame: Uint8Array | null; onFrame: (fr
 
   const run = async () => {
     if (!frame) return;
+    setRunning(true);
+    // ICE over mDNS host candidates occasionally stalls: one fresh attempt before giving up.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const err = await once();
+      if (!err) break;
+      setStatus(attempt === 1 ? `${err} · retrying with a fresh link…` : err);
+    }
+    setRunning(false);
+  };
+
+  /** One pairing + transfer; returns an error message, or null on success. */
+  const once = async (): Promise<string | null> => {
+    if (!frame) return "No frame";
     links.current.forEach((l) => l.close());
     links.current = [];
-    setRunning(true);
     setStatus("gathering local candidates…");
     setOffer(null);
     setAnswer(null);
@@ -59,25 +71,27 @@ function VirtualLan({ frame, onFrame }: { frame: Uint8Array | null; onFrame: (fr
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const seenAnswer = answerQr.current ? readQrFromCanvas(answerQr.current) : null;
       if (seenAnswer !== guest.code) throw new Error("Answer QR unreadable");
-      const received = new Promise<Uint8Array>((resolve, reject) => {
-        guest.link.onFrame(resolve);
-        setTimeout(() => reject(new Error("LAN link did not open within 10 s")), 10_000);
-      });
-      const opened = new Promise<void>((resolve) => host.link.onState((s) => s === "open" && resolve()));
+      const timeout = (what: string) => new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`LAN link: ${what} within 10 s`)), 10_000));
+      const received = new Promise<Uint8Array>((resolve) => guest.link.onFrame(resolve));
+      const opened = new Promise<void>((resolve, reject) =>
+        host.link.onState((s, d) => {
+          if (s === "open") resolve();
+          if (s === "failed") reject(new Error(d ?? "LAN link failed"));
+        }),
+      );
       await host.link.accept(seenAnswer);
-      await opened;
+      await Promise.race([opened, timeout("not open")]);
       const tSend = performance.now();
       host.link.send(frame);
-      const got = await received;
+      const got = await Promise.race([received, timeout("no frame")]);
       const ms = performance.now() - tSend;
       setStatus(
         `WebRTC LAN · offer ${host.code.length} chars, answer ${guest.code.length} chars (QR) · link open in ${((tSend - t0) / 1000).toFixed(1)} s · ${(frame.length / 1024).toFixed(1)} KB delivered in ${ms.toFixed(0)} ms`,
       );
       onFrame(got, "lan");
+      return null;
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRunning(false);
+      return e instanceof Error ? e.message : String(e);
     }
   };
 

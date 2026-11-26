@@ -282,7 +282,8 @@ check("portal: E2EE image decrypted with the shared passphrase, verified and sho
 // WebRTC LAN, two peers in the page, signaled through real QR rendering and reading.
 await click("WebRTC LAN");
 await click("Send over a virtual WebRTC LAN link");
-const lan = await until(`(document.body.innerText.match(/WebRTC LAN · offer \\d+ chars[^\\n]*delivered in \\d+ ms/) || [])[0]`, 30000);
+const lan = await until(`(document.body.innerText.match(/WebRTC LAN · offer \\d+ chars[^\\n]*delivered in \\d+ ms/) || [])[0]`, 45000);
+if (!lan) console.log("debug LAN:", String(await ev(`document.body.innerText`)).match(/Send over a virtual WebRTC LAN link[^]*?(?=Waiting for|Corrupted|ED25519|$)/)?.[0]?.slice(0, 400));
 const lanOk = await until(`/WebRTC LAN · \\d+ B · CRC32/.test(document.body.innerText) && document.body.innerText.includes("ED25519 VERIFIED")`, 5000);
 check("portal: WebRTC LAN link (QR-signaled, no server) delivers the frame", lan && lanOk, lanOk ? lan : `${lan} ## ${String(await ev(`document.body.innerText`)).match(/(Corrupted spirit rejected|ED25519 VERIFIED)[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## ")}`);
 // Ultrasonic Whisper: identity card at 17.6–19.6 kHz, then pin.
