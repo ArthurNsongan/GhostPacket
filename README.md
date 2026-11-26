@@ -53,12 +53,14 @@ The skeleton is `crates/ghostpacket-core` + `packages/ghostpacket-sdk` + `packag
 
 **Redemption rule.** A valid signature alone never releases medicine or money: anyone can sign a voucher with a fresh key. The pharmacy and the pay-out desk require the expected document type, no DEMO flag, a pinned issuer (fingerprint checked with the issuer), a plausible timestamp and an unexpired voucher. They then record the redemption in an append-only ledger that fails closed when storage is full.
 
-**Redesign ("Midnight Atelier").** Haunted Mode (default) is classy first, spooky second:
+**Redesign ("Midnight Atelier", playful haunt).** Haunted Mode (default) keeps classy surfaces and adds a fun, never-scary haunt:
 - Fraunces titles with a soft "wonky" italic accent, Geist for the interface, Geist Mono for telemetry (all self-hosted);
 - one warm candlelight accent per app; mist green only for "verified", garnet only for errors;
 - fine-line audio-reactive emblems (lantern, plague-doctor mask, wax seal);
-- a pale moon and a candle glow at rest; a bat swarm only while a frame is in the air; a blood moon on rejection;
-- synthesized cues (theremin, clock bell, organ fifth, tritone with thunder, funeral bell) and an optional crypt drone.
+- a pale moon and a candle glow at rest, resident bats, a tiny bat flock on every click, a swarm while a frame is in the air and a blood moon on rejection;
+- friendly Kiro-style ghosts animated with GSAP (shy, clickable: "Boo!") that race, hop or hide with the protocol;
+- a three.js hero (a ghost over a carved pumpkin, bats in orbit), loaded on demand;
+- fun click sounds (boo, giggle, bat squeak, pumpkin pop, whoosh) plus the protocol cues (theremin, clock bell, organ fifth, tritone, funeral bell) and an optional crypt drone — all synthesized, silent while the modem runs.
 
 Every sound is off by default and silenced instantly while the real modem plays or listens. **Clean Field Mode** removes the decoration for real clinics and markets.
 

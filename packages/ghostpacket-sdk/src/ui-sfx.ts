@@ -1,5 +1,6 @@
-// Optional sound effects and crypt ambience, synthesized with Web Audio
-// (no audio file, no network). Off by default.
+// Sound effects and crypt ambience, synthesized with Web Audio (no audio file,
+// no network). Effects are on by default (a click is the user gesture that
+// unlocks audio); the ambience stays off until asked for.
 // - Haunted Mode plays the spooky cues of HALLOWEEN_REDESIGN_PLAN.md §4;
 //   Clean Field Mode plays short neutral tones.
 // - Always silent while the real modem plays a burst or the microphone listens
@@ -12,11 +13,12 @@ import { currentTheme } from "./theme";
 const KEY = "ghostpacket.sfx";
 const AMBIENCE_KEY = "ghostpacket.ambience";
 
-function stored(key: string): boolean {
+function stored(key: string, fallback = false): boolean {
   try {
-    return prefs().getItem(key) === "on";
+    const v = prefs().getItem(key);
+    return v === null ? fallback : v === "on";
   } catch {
-    return false;
+    return fallback;
   }
 }
 
@@ -28,7 +30,7 @@ function store(key: string, on: boolean): void {
   }
 }
 
-let enabled = stored(KEY);
+let enabled = stored(KEY, true);
 let ambienceOn = stored(AMBIENCE_KEY);
 let manualMute = false;
 const listeners = new Set<(on: boolean) => void>();
@@ -196,6 +198,104 @@ const HAUNTED: Record<Cue, (ctx: AudioContext, out: AudioNode, t: number) => voi
   // Soft ascending ethereal arpeggio.
   synced: (c, o, t) => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, o, f, t + i * 0.09, 0.6, 0.025, "sine", 0.03)),
 };
+
+// ---- Fun click cues (Haunted Mode) -----------------------------------------
+// Cartoon-spooky, never scary: short, soft, a little silly. `p` detunes each
+// play slightly so repeated clicks do not sound mechanical.
+
+export type FunCue = "boo" | "giggle" | "bat" | "pop" | "whoosh" | "chime";
+
+function vibrato(c: AudioContext, osc: OscillatorNode, t: number, rate: number, depth: number, dur: number): void {
+  const lfo = c.createOscillator();
+  const g = c.createGain();
+  lfo.frequency.value = rate;
+  g.gain.value = depth;
+  lfo.connect(g).connect(osc.frequency);
+  lfo.start(t);
+  lfo.stop(t + dur + 0.05);
+}
+
+const FUN: Record<FunCue, (c: AudioContext, o: AudioNode, t: number, p: number) => void> = {
+  // A friendly cartoon ghost: "woo-OO-oo", wobbling vowel through a soft low-pass.
+  boo: (c, o, t, p) => {
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1700;
+    lp.connect(o);
+    [1, 1.5].forEach((r, i) => {
+      const osc = c.createOscillator();
+      osc.type = i ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(380 * p * r, t);
+      osc.frequency.exponentialRampToValueAtTime(620 * p * r, t + 0.2);
+      osc.frequency.exponentialRampToValueAtTime(300 * p * r, t + 0.62);
+      vibrato(c, osc, t, 7, 16 * r, 0.7);
+      osc.connect(env(c, t, i ? 0.012 : 0.05, 0.06, 0.7, lp));
+      osc.start(t);
+      osc.stop(t + 0.75);
+    });
+  },
+  // Three little rising "hee-hee-hee" chirps.
+  giggle: (c, o, t, p) => {
+    [880, 1046, 1244, 1046].forEach((f, i) => {
+      const at = t + i * 0.075;
+      const osc = c.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(f * p, at);
+      osc.frequency.exponentialRampToValueAtTime(f * p * 1.25, at + 0.05);
+      osc.connect(env(c, at, 0.03, 0.006, 0.07, o));
+      osc.start(at);
+      osc.stop(at + 0.1);
+    });
+  },
+  // Two tiny bat squeaks and a wing flutter.
+  bat: (c, o, t, p) => {
+    [0, 0.075].forEach((d) => {
+      const osc = c.createOscillator();
+      osc.frequency.setValueAtTime(3600 * p, t + d);
+      osc.frequency.exponentialRampToValueAtTime(2300 * p, t + d + 0.045);
+      osc.connect(env(c, t + d, 0.022, 0.003, 0.05, o));
+      osc.start(t + d);
+      osc.stop(t + d + 0.08);
+    });
+    burst(c, o, t, 0.12, 0.018, "bandpass", 900 * p, 2.5);
+  },
+  // Pumpkin-bubble pop: quick pitch drop plus a tiny click.
+  pop: (c, o, t, p) => {
+    const osc = c.createOscillator();
+    osc.frequency.setValueAtTime(880 * p, t);
+    osc.frequency.exponentialRampToValueAtTime(170 * p, t + 0.09);
+    osc.connect(env(c, t, 0.07, 0.003, 0.11, o));
+    osc.start(t);
+    osc.stop(t + 0.15);
+    burst(c, o, t, 0.012, 0.03, "highpass", 3200, 0.7);
+  },
+  // A ghost flying past: rising airy swish.
+  whoosh: (c, o, t, p) => {
+    const f = burst(c, o, t, 0.28, 0.035, "bandpass", 380 * p, 1.4);
+    f.frequency.exponentialRampToValueAtTime(2200 * p, t + 0.26);
+  },
+  // Music-box minor third, for toggles.
+  chime: (c, o, t, p) => {
+    bell(c, o, 1046.5 * p, t, 0.5, 0.022);
+    bell(c, o, 1244.5 * p, t + 0.09, 0.6, 0.02);
+  },
+};
+
+/** Plays a fun click cue: Haunted Mode only, when effects are on, never while the modem runs. */
+export async function funSfx(cue: FunCue): Promise<void> {
+  if (!enabled || silent() || currentTheme() !== "haunted") return;
+  try {
+    const ctx = await audioContext();
+    if (silent()) return;
+    const out = ctx.createGain();
+    out.gain.value = 0.8;
+    out.connect(masterFor(ctx));
+    FUN[cue](ctx, out, ctx.currentTime + 0.005, 0.92 + Math.random() * 0.16);
+    setTimeout(() => out.disconnect(), 1500);
+  } catch {
+    /* audio unavailable: effects are optional */
+  }
+}
 
 // Every cue goes through one master gain, cut to silence the instant the modem
 // starts, so even a cue already scheduled (echo tails) cannot reach the microphone.

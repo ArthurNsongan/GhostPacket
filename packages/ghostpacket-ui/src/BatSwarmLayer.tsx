@@ -1,8 +1,9 @@
 "use client";
 
-// Spectral bats (HALLOWEEN_REDESIGN_PLAN.md, V4): no resident silhouettes; a
-// transmission sends a small swarm from left to right; a lost
-// droplet turns one bat into ember sparks; a rejection scatters the swarm.
+// Spectral bats (HALLOWEEN_REDESIGN_PLAN.md, V5): a few resident bats drift in
+// the night sky; every click releases a tiny flock from the pointer; a
+// transmission sends a swarm from left to right; a lost droplet turns one bat
+// into ember sparks; a rejection scatters the swarm.
 // Canvas 2D, pointer-events: none, behind the panels. Haunted Mode only; stops
 // under prefers-reduced-motion and while the tab is hidden.
 import { useEffect, useRef } from "react";
@@ -31,9 +32,9 @@ interface Spark {
   life: number;
 }
 
-// No resident bats: the swarm only appears when something happens (transmit, drop, rejection).
-const AMBIENT = 0;
-const MAX_BATS = 40;
+// A handful of resident bats; the rest appear when something happens.
+const AMBIENT = 4;
+const MAX_BATS = 48;
 
 function rand(a: number, b: number) {
   return a + Math.random() * (b - a);
@@ -105,7 +106,7 @@ export default function BatSwarmLayer() {
       }
       dirty = bats.length > 0 || sparks.length > 0;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = rgba(PAL.ion, 0.3);
+      ctx.fillStyle = rgba(PAL.ion, 0.42);
       for (let i = bats.length - 1; i >= 0; i--) {
         const b = bats[i];
         if (!b) continue;
@@ -178,6 +179,17 @@ export default function BatSwarmLayer() {
         }
       }
     });
+    // Every click (outside text fields) lets a tiny flock out of the pointer.
+    const onPointer = (e: PointerEvent) => {
+      if (!running() || e.button !== 0) return;
+      const t = e.target as Element | null;
+      if (t?.closest?.("input, textarea, select, [contenteditable]")) return;
+      for (let i = 0; i < 4 && bats.length < MAX_BATS; i++) {
+        const a = rand(-Math.PI * 0.95, -Math.PI * 0.05);
+        bats.push({ x: e.clientX, y: e.clientY, vx: Math.cos(a) * rand(2.2, 4), vy: Math.sin(a) * rand(1.6, 3.2), size: rand(4.5, 7.5), phase: rand(0, 6), flap: rand(0.55, 0.7), ttl: 150 });
+      }
+    };
+    window.addEventListener("pointerdown", onPointer, { passive: true });
     const onVis = () => sync();
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
     window.addEventListener("resize", resize);
@@ -188,10 +200,11 @@ export default function BatSwarmLayer() {
       offTheme();
       offSpectral();
       window.removeEventListener("resize", resize);
+      window.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("visibilitychange", onVis);
       motion.removeEventListener("change", sync);
     };
   }, []);
 
-  return <canvas ref={canvas} aria-hidden className="haunt-only pointer-events-none fixed inset-0 -z-10 h-full w-full" />;
+  return <canvas ref={canvas} aria-hidden className="haunt-only pointer-events-none fixed inset-0 z-[25] h-full w-full" />;
 }

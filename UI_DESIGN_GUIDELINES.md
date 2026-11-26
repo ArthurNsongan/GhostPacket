@@ -1,8 +1,8 @@
-# GhostPacket — UI/UX Design Guidelines ("Midnight Atelier", V4)
+# GhostPacket — UI/UX Design Guidelines ("Midnight Atelier", V5 playful haunt)
 
 > **Art direction**: an October campaign for a luxury house meets a precision lab instrument. Editorial typography, a single warm accent, deep aubergine night, a pale moon and candlelight.
 >
-> **Golden rule**: **classy first, spooky second.** Halloween comes through **light, typography, micro-copy and event-driven motion** — never through clichés (no cobwebs, no gothic blackletter, no clipart pumpkins, no neon).
+> **Golden rule**: **classy surfaces, playful haunt.** The interface itself stays editorial (typography, one warm accent, selection without outlines). On top of it, Haunted Mode adds a cartoon-spooky layer — friendly Kiro-style ghosts, bats, a 3D ghost and pumpkin, fun click sounds — that is **fun, never frightening**, and never blocks reading or clicking. No cobwebs, no gothic blackletter, no neon.
 
 Source of truth in code: `packages/ghostpacket-ui/styles/ghostpacket.css` (tokens, fonts, shared classes) and `packages/ghostpacket-ui/styles/haunted.css` (themes and per-app accents). Canvas drawings read the same tokens through `packages/ghostpacket-ui/src/palette.ts`.
 
@@ -69,6 +69,15 @@ Scale: hero `clamp(2.8rem, 6vw, 5.4rem)` at line-height 0.98; section titles `cl
 - **Scroll**: `.rise` entrances (fade, 18 px, blur → sharp) via `animation-timeline: view()` where supported.
 - **Emblems**: fine-line lantern / plague-doctor mask / wax seal; only their light reacts to the audio level and the verdict.
 - `prefers-reduced-motion: reduce` turns off drift, entrances, shakes, stamps, pulses and bats.
+
+---
+
+### Playful layer (V5, Haunted Mode only)
+- **Ghostlings** (`GhostCrew`): 3 original Kiro-style ghosts (ivory body, big oval eyes, blush, `--color-spectre` violet glow). Shy: they slip away from the pointer most of the time; clicking one gives "Boo!", a twirl and a giggle.
+- **Bats**: 4 resident; a tiny flock leaves the pointer on each click; swarm on `transmit`.
+- **GSAP** (`HauntedFun`): jelly squish on click, magnetic `.cta-ember`, title words rising on arrival.
+- **3D** (`SpookyScene3D`, three.js on demand): ghost + carved pumpkin + orbiting bats in the portal hero; pointer parallax; clickable.
+- **Sounds** (`funSfx`): boo, giggle, bat squeak, pumpkin pop, whoosh, music-box chime. Short and soft; on by default; silent while the modem or microphone runs.
 
 ---
 

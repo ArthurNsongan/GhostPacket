@@ -1,6 +1,20 @@
 # GhostPacket — Halloween Redesign Plan
 
-## V4 — "Midnight Atelier" (current)
+## V5 — "Midnight Atelier, playful haunt" (current)
+
+V5 keeps the V4 typography, palette and selection rules and adds a playful, cartoon-spooky layer (fun, never frightening). Everything is Haunted Mode only, off under `prefers-reduced-motion`, and hidden in Clean Field Mode.
+
+| V4 | V5 |
+|---|---|
+| No resident bats | 4 resident bats in the sky + a tiny flock released from the pointer on every click (`BatSwarmLayer`, above the panels, `pointer-events: none`) |
+| No ghosts | **Ghostlings** (`GhostCrew`): 3 friendly Kiro-style ghosts (Kiro violet glow `--color-spectre`). GSAP idle bob, wandering, eyes that follow the pointer; shy (they usually slip away from the cursor, so they never block reading or clicking); click → "Boo!", twirl, giggle, poof, reappear. React to `transmit` (race along), `verified` (happy hop), `rejected` / `replay` (scared, faint) |
+| CSS-only motion | **GSAP** (`HauntedFun`): jelly squish on every click, magnetic primary CTA, page titles rising word by word (SplitText, reverted after the intro) |
+| 2D only | **3D hero** (`SpookyScene3D`, three.js loaded on demand): a ghost floating over a glowing carved pumpkin, bats in orbit, fireflies, pointer parallax; click the ghost (twirl + boo) or the pumpkin (pop + flare). Paused off screen and in hidden tabs |
+| SFX off by default, protocol cues only | SFX **on by default**; fun click cues `funSfx()` in `ui-sfx`: `boo` (cartoon ghost), `giggle`, `bat` (toggles, tabs), `pop` (buttons), `whoosh` (links), `chime`. Still synthesized, still silenced while the modem or the microphone runs |
+
+---
+
+## V4 — "Midnight Atelier"
 
 V4 keeps the V3 architecture (Haunted / Clean Field modes, per-app identity, `spectral()` events, procedural sound engine) and replaces its look, which had become too costume-like:
 

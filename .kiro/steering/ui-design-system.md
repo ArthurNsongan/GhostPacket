@@ -3,12 +3,12 @@ inclusion: fileMatch
 fileMatchPattern: ["apps/*/src/**/*.ts", "apps/*/src/**/*.tsx", "apps/*/src/**/*.css", "packages/ghostpacket-ui/src/**/*.tsx", "packages/ghostpacket-ui/styles/*.css"]
 ---
 
-# "Midnight Atelier" visual system (V4)
+# "Midnight Atelier" visual system (V5, playful haunt)
 
 Full reference: #[[file:UI_DESIGN_GUIDELINES.md]]
 Halloween layer: #[[file:HALLOWEEN_REDESIGN_PLAN.md]]
 
-Art direction: an October campaign for a luxury house. Halloween comes through light (moon, candle glow), editorial type and restrained micro-copy, never through clichés (no cobwebs, no gothic blackletter, no neon).
+Art direction: an October campaign for a luxury house, with a playful haunt on top. Surfaces stay editorial; Haunted Mode adds friendly Kiro-style ghosts, bats, a 3D ghost and pumpkin and fun click sounds — cartoon-spooky, never frightening, never blocking content. No cobwebs, no gothic blackletter, no neon.
 
 ## Where styles live
 - `packages/ghostpacket-ui/styles/ghostpacket.css`: Tailwind `@theme` tokens, self-hosted fonts, panels, buttons, atmosphere, animations. Each app's `src/app/globals.css` only imports Tailwind, declares its `@source` paths and imports this file.
@@ -43,8 +43,11 @@ Class names are functional: a colour change happens in the CSS files, never in c
 - `.panel` hover: a warm candle glow inside the panel (`--mx`/`--my` set by `AppFrame`), not a lit border.
 
 ## Decoration (Haunted Mode only, `haunt-only`)
-- At rest: a pale moon, a candle glow from below, film grain. Nothing else.
-- On events, through `spectral()`: `transmit` sends a small bat swarm (`BatSwarmLayer`, no resident bats), `drop` turns one into sparks, `rejected` / `replay` scatters it and turns the moon garnet (`.blood-moon`, 1.6 s, no lightning).
+- At rest: a pale moon, a candle glow from below, film grain, 4 resident bats and 3 Ghostlings (`GhostCrew`, GSAP, shy: they slip away from the pointer).
+- On click: a tiny bat flock from the pointer, a GSAP jelly squish and a fun sound (`HauntedFun` → `funSfx`: boo, giggle, bat, pop, whoosh, chime).
+- On events, through `spectral()`: `transmit` sends a bat swarm and makes the ghosts race, `verified` makes them hop, `drop` turns a bat into sparks, `rejected` / `replay` scatters the bats, scares the ghosts and turns the moon garnet (`.blood-moon`, 1.6 s, no lightning).
+- Portal hero: `SpookyScene3D` (three.js loaded on demand, paused off screen).
+- Kiro violet `--color-spectre` is for ghost glow only, never a status.
 - Emblems (`SpectralEmblem`) are fine-line monochrome drawings (lantern, plague-doctor mask, wax seal) whose only light follows the audio level and the verdict.
 - Clean Field Mode hides every decorative layer; `prefers-reduced-motion` stops drift, reveals, stamps, pulses and bats.
 
@@ -52,5 +55,5 @@ Class names are functional: a colour change happens in the CSS files, never in c
 - New screens reuse `AppFrame`, `FormKit` (`TabBar`, `TextField`, `NumberField`, `Stat`, `Panel`, `Hero`) and `AirTransfer`.
 - Layout: generous spacing, editorial hero (open, not boxed), bento grids for figures, `.rise` for scroll-driven entrances.
 - Animations in CSS (`transform` / `opacity`); DSP rendering in Canvas 2D through `requestAnimationFrame`, never React state per sample.
-- UI sounds come from `ui-sfx` only, are off by default and are silenced while the modem or the microphone runs.
+- UI sounds come from `ui-sfx` only (`sfx()` for protocol cues, `funSfx()` for clicks), are on by default in Haunted Mode, and are silenced while the modem or the microphone runs.
 - UI language is English. Micro-copy stays restrained ("Summon the full demo", "Curse 1 bit", "Cryptographic seal intact", "Corrupted spirit rejected").

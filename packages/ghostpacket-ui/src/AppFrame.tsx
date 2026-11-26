@@ -13,7 +13,9 @@ import { medianMs } from "ghostpacket-sdk/wasm-bridge";
 
 import BatSwarmLayer from "./BatSwarmLayer";
 import BloodMoonAtmosphere from "./BloodMoonAtmosphere";
+import GhostCrew from "./GhostCrew";
 import { GhostProvider, useShell } from "./GhostContext";
+import HauntedFun from "./HauntedFun";
 import SpectralEmblem from "./SpectralEmblem";
 import ThemeControls from "./ThemeControls";
 
@@ -76,6 +78,8 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
       <div className="grain" aria-hidden />
       <BloodMoonAtmosphere />
       <BatSwarmLayer />
+      <GhostCrew />
+      <HauntedFun />
       <header className="glass sticky top-0 z-40 border-b border-grid">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-8 gap-y-2 px-4 py-2.5 sm:px-8">
           {homeLink(
