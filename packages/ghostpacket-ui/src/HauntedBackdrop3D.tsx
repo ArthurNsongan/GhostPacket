@@ -383,10 +383,11 @@ function Backdrop() {
 
       // ---- Loop ----
       const still = !hauntedMotion();
-      const clock = new THREE.Clock();
+      // THREE.Clock is deprecated (console warning): a plain monotonic clock is enough here.
+      const t0 = performance.now();
       const look = new THREE.Vector3();
       const render = () => {
-        const t = clock.getElapsedTime();
+        const t = (performance.now() - t0) / 1000;
         const scroll = Math.min(window.scrollY * 0.004, 5);
         camera.position.x += (aim.x * 0.9 - camera.position.x) * 0.04;
         camera.position.y += (1.7 - aim.y * 0.35 + scroll * 0.08 - camera.position.y) * 0.04;

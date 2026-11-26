@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // End-to-end check of the Skeleton Crew apps in headless Chrome, on the merged
 // GitHub Pages tree (scripts/build-pages.mjs --base /GhostPacket):
-//   node scripts/build-pages.mjs --base /GhostPacket && node scripts/e2e-apps.mjs [pages-out]
-//   GP_BASE_URL=https://<user>.github.io/GhostPacket node scripts/e2e-apps.mjs   (deployed site)
+//   node scripts/build-pages.mjs --base /GhostPacket && node scripts/e2e/apps.mjs [pages-out]
+//   GP_BASE_URL=https://<user>.github.io/GhostPacket node scripts/e2e/apps.mjs   (deployed site)
 // GhostClinic: seeded ward → sign → virtual hand-over → verify → dispense once → refuse twice.
 // GhostTontine: contribution receipt → wallet; aid voucher → redeem once → refuse twice.
 // Both: storage isolation, Clean Field Mode, service worker scope, no error, no external request, no 404.
@@ -121,6 +121,11 @@ const go = async (path) => {
 const click = (text) =>
   ev(`(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent.includes(${JSON.stringify(text)}) && x.offsetParent !== null && !x.disabled); if (!b) return false; b.click(); return true; })()`);
 const text = () => ev("document.body.innerText");
+/** Types into a React-controlled input found by its aria-label. */
+const type = (label, value) =>
+  ev(`(() => { const el = document.querySelector(${JSON.stringify(`input[aria-label="${label}"]`)}); if (!el) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`);
+const footerKey = () => ev(`(document.querySelector("footer")?.innerText.match(/GPKT-[0-9A-F]{4}-[0-9A-F]{4}/) || [])[0] || null`);
+const PASS = "baobab moon harmattan";
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -133,6 +138,24 @@ await send("Network.enable");
 
 // ---- GhostClinic -------------------------------------------------------------
 await go("/clinic/");
+// Persistent issuer identity: create, reload, wrong passphrase, unlock, same fingerprint.
+check("clinic: asks to create the issuer identity", await until(`document.body.innerText.includes("Create and seal the key")`, 20000));
+await type("Identity passphrase", PASS);
+await type("Repeat the identity passphrase", PASS);
+await click("Create and seal the key");
+await until(`document.body.innerText.includes("unlocked from this device")`, 10000);
+const created = await footerKey();
+await go("/clinic/");
+await until(`document.body.innerText.includes("Unlock your")`, 20000);
+const shown = await ev(`(document.body.innerText.match(/GPKT-[0-9A-F]{4}-[0-9A-F]{4}/) || [])[0] || null`);
+await type("Identity passphrase", "not the passphrase");
+await click("Unlock");
+check("clinic: wrong passphrase refused (VAULT_INVALID)", await until(`document.body.innerText.includes("Wrong passphrase")`, 10000));
+await type("Identity passphrase", PASS);
+await click("Unlock");
+await until(`document.body.innerText.includes("unlocked from this device")`, 10000);
+const unlocked = await footerKey();
+check("clinic: issuer fingerprint survives a reload (vault)", created && created === shown && created === unlocked, `${created} / ${shown} / ${unlocked}`);
 const ward = await until(`document.body.innerText.includes("PAT-0815") && document.body.innerText.includes("Mariama Ba")`, 20000);
 check("clinic: renders the seeded ward from local records", ward);
 check("clinic: haunted theme, clinic identity", (await ev(`[document.documentElement.dataset.theme, document.documentElement.dataset.app].join("/")`)) === "haunted/clinic");
@@ -164,9 +187,22 @@ check("clinic: Clean Field Mode hides the decoration", clean === "clean/0", clea
 await click("Clean field mode");
 const swClinic = await until(`navigator.serviceWorker.getRegistration().then((r) => r && r.scope)`, 10000);
 check("clinic: own service worker scope", typeof swClinic === "string" && swClinic.endsWith("/GhostPacket/clinic/"), swClinic);
+// GPKT v2: a clinical photo linked to the prescription, over ChromaCrypt.
+await click("Prescribe & hand over");
+await until(`document.body.innerText.includes("Use the sample")`);
+await click("Use the sample");
+await until(`/\\d+×\\d+ · [\\d.]+ KB/.test(document.body.innerText)`, 15000);
+await click("Sign the photo for");
+const photo = await until(`(document.body.innerText.match(/IMG-[A-Z0-9]{4} → RX-[A-Z0-9]{5} · [\\d.]+ KB GPKT v2/) || [])[0]`, 15000);
+check("clinic: photo signed as a GPKT v2 frame (> 512 B)", photo && Number(photo.match(/([\d.]+) KB/)[1]) * 1024 > 512, photo);
+await click("Hand over the photo");
+const pic = await until(`document.body.innerText.includes("Signed attachment for RX-") && document.body.innerText.includes("ED25519 VERIFIED") && [...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 60000);
+check("clinic: photo rebuilt from color matrices (30 % lost), verified and shown", pic, (await text()).match(/ChromaCrypt · [^\n]*/)?.[0]);
 
 // ---- GhostTontine ------------------------------------------------------------
 await go("/tontine/");
+await until(`document.body.innerText.includes("Continue with a session key")`, 20000);
+await click("Continue with a session key");
 check("tontine: renders the seeded members", await until(`document.body.innerText.includes("Aminata Diop") && document.body.innerText.includes("Coumba Gueye")`, 20000));
 check("tontine: theme shared across apps (prefs), tontine identity", (await ev(`[document.documentElement.dataset.theme, document.documentElement.dataset.app].join("/")`)) === "haunted/tontine");
 await click("Record contribution");
@@ -187,6 +223,19 @@ await click("Redeemed ✓");
 check("tontine: same voucher refused the second time (REPLAY)", await until(`document.body.innerText.includes("Already redeemed") && /REPLAY/.test(document.body.innerText)`));
 const tkeys = await ev(`Object.keys(localStorage)`);
 check("tontine: clinic data invisible to the tontine", tkeys.some((k) => k.startsWith("tontine:")) && !(await ev(`document.body.innerText.includes("PAT-0815")`)));
+
+// ---- Portal: V3 high-speed lab, OFDM ---------------------------------------------
+await go("/simulation/");
+await until(`document.body.innerText.includes("V3 high-speed lab")`, 20000);
+await click("Use the sample");
+await until(`/\\d+×\\d+ · [\\d.]+ KB/.test(document.body.innerText)`, 15000);
+await click("Sign the image");
+await until(`document.body.innerText.includes("OFDM chord (sound)")`, 15000);
+await click("OFDM chord (sound)");
+await click("Send through the OFDM chord");
+const ofdm = await until(`(document.body.innerText.match(/OFDM · \\d+ B in [\\d.]+ s \\([\\d.]+ kbit\\/s\\)[^\\n]*/) || [])[0]`, 60000);
+const ofdmImg = await until(`[...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 5000);
+check("portal: image over the OFDM chord (15 dB SNR), verified and shown", ofdm && ofdmImg, ofdm);
 
 // ---- Portal links -------------------------------------------------------------
 await go("/");

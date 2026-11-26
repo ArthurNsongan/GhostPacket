@@ -18,11 +18,11 @@
   - [x] 3.2 `apps/ghost-tontine`: members, rounds and pot, receipts to the member wallet, single-use aid vouchers paid out once
   - [x] 3.3 Shared blocks: `AirTransfer` (`AirSender`, `AirReceiver`, `VirtualHandover`), `FormKit`, `IssuerGate`; SDK `records.ts`, `redemption-policy.ts`, `redeemOnce`, `setStorageNamespace`
   - [x] 3.4 Multi-app GitHub Pages build (`scripts/build-pages.mjs`: `/`, `/clinic/`, `/tontine/`), per-app service worker and cache
-  - [x] 3.5 `scripts/e2e-apps.mjs`: 22 headless Chrome checks (both apps, isolation, Clean mode, worker scope, 0 error / external request / 404)
+  - [x] 3.5 `scripts/e2e/apps.mjs`: 22 headless Chrome checks (both apps, isolation, Clean mode, worker scope, 0 error / external request / 404)
   - [x] 3.6 Review by `dsp-security-auditor`; findings fixed (see design.md "Security review"), SDK tests for the redemption policy
   - _Requirements: 2.*_
-- [ ] 4. Open decisions
-  - [ ] 4.1 Persistent issuer key for the clinic and the treasurer (today the key lives for one tab session, so a pin lasts one session)
+- [ ] 4. Decisions
+  - [x] 4.1 Persistent issuer key for the clinic and the treasurer: identity vault sealed by the core (spec `high-speed-transports`, requirement 4)
   - [ ] 4.2 Dedicated origin (custom domain) instead of the shared `<user>.github.io` origin
-- [ ] 5. High-speed transports and GPKT v2 (Phases 2–3, separate spec `high-speed-transports`)
-- [ ] 6. Supabase backend (Phase 3) or keep `ghostpacket-verifier` as the cloud side
+- [x] 5. High-speed transports and GPKT v2: GPKT v2, ChromaCrypt, OFDM, clinic photo, high-speed lab (spec `high-speed-transports`); ultrasonic and WebRTC postponed
+- [x] 6. Cloud side: `ghostpacket-verifier` is kept instead of Supabase (no account, same Rust verification, already hardened); it accepts GPKT v2 frames

@@ -5,6 +5,7 @@
 //! payload limit.
 
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
 use crate::error::GhostError;
 
@@ -16,6 +17,14 @@ pub const DOC_TYPE_TONTINE: u8 = 0x01;
 pub const DOC_TYPE_PRESCRIPTION: u8 = 0x02;
 pub const DOC_TYPE_VOUCHER: u8 = 0x03;
 pub const DOC_TYPE_MESSAGE: u8 = 0x04;
+pub const DOC_TYPE_IMAGE: u8 = 0x05;
+
+/// Image documents travel in GPKT v2 frames only (payload ≤ 128 KB).
+pub const MAX_IMAGE_BYTES: usize = 64 * 1024;
+pub const MAX_IMAGE_SIDE: u16 = 4096;
+pub const IMAGE_MIME_WEBP: u8 = 1;
+pub const IMAGE_MIME_JPEG: u8 = 2;
+pub const IMAGE_MIME_PNG: u8 = 3;
 
 /// Bounds of a free-form message. Worst case (incompressible text at every
 /// bound, 10-byte timestamp varint) serializes to 403 bytes: with the 32 bytes
@@ -72,14 +81,91 @@ pub enum DocumentBody {
         valid_until: u64,
         note: String,
     },
-    /// Free-form signed message typed by the user. Must stay the last variant:
-    /// postcard encodes the variant index, so reordering would break old frames.
+    /// Free-form signed message typed by the user. postcard encodes the variant
+    /// index: variants are only ever appended, never reordered.
     #[serde(rename_all = "camelCase")]
     CustomMessage {
         sender: String,
         title: String,
         message: String,
     },
+    /// A compressed image (WebP, JPEG or PNG made by the sender's browser) with
+    /// its context, e.g. a malaria rapid-test photo linked to a prescription.
+    /// The bytes are inside the signed document. GPKT v2 only.
+    #[serde(rename_all = "camelCase")]
+    ImageDocument {
+        title: String,
+        subject_ref: String,
+        caption: String,
+        /// Id of a related document (e.g. the prescription); all zeros = none.
+        related_doc_id: [u8; 8],
+        mime: u8,
+        width: u16,
+        height: u16,
+        #[serde(with = "bytes")]
+        image: Vec<u8>,
+    },
+}
+
+/// (De)serializes `Vec<u8>` as a byte string: a `Uint8Array` in JavaScript, a
+/// length-prefixed byte run in postcard (same wire bytes as a `Vec<u8>` sequence).
+mod bytes {
+    use serde::de::{SeqAccess, Visitor};
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &[u8], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(v)
+    }
+
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            f.write_str("a byte string")
+        }
+
+        fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+            if v.len() > super::MAX_IMAGE_BYTES {
+                return Err(E::custom("image too large"));
+            }
+            Ok(v.to_vec())
+        }
+
+        fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
+            if v.len() > super::MAX_IMAGE_BYTES {
+                return Err(E::custom("image too large"));
+            }
+            Ok(v)
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
+            // Bounded before growing: a hostile length cannot allocate more than the cap.
+            let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(super::MAX_IMAGE_BYTES));
+            while let Some(b) = seq.next_element::<u8>()? {
+                if out.len() >= super::MAX_IMAGE_BYTES {
+                    return Err(serde::de::Error::custom("image too large"));
+                }
+                out.push(b);
+            }
+            Ok(out)
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        d.deserialize_bytes(BytesVisitor)
+    }
+}
+
+/// Container check by magic bytes: only formats the browser can decode safely.
+pub fn image_format_ok(mime: u8, image: &[u8]) -> bool {
+    match mime {
+        IMAGE_MIME_WEBP => image.get(0..4) == Some(b"RIFF") && image.get(8..12) == Some(b"WEBP"),
+        IMAGE_MIME_JPEG => image.get(0..3) == Some(&[0xFF, 0xD8, 0xFF]),
+        IMAGE_MIME_PNG => image.get(0..8) == Some(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
+        _ => false,
+    }
 }
 
 impl DocumentBody {
@@ -89,6 +175,7 @@ impl DocumentBody {
             DocumentBody::MedicalPrescription { .. } => DOC_TYPE_PRESCRIPTION,
             DocumentBody::EmergencyVoucher { .. } => DOC_TYPE_VOUCHER,
             DocumentBody::CustomMessage { .. } => DOC_TYPE_MESSAGE,
+            DocumentBody::ImageDocument { .. } => DOC_TYPE_IMAGE,
         }
     }
 }
@@ -188,8 +275,40 @@ impl GhostDocument {
                 check_field("title", title, MAX_TITLE_BYTES)?;
                 check_field("message", message, MAX_MESSAGE_BYTES)?;
             }
+            DocumentBody::ImageDocument {
+                title,
+                subject_ref,
+                caption,
+                mime,
+                width,
+                height,
+                image,
+                ..
+            } => {
+                check_field("title", title, MAX_TITLE_BYTES)?;
+                check_field("subjectRef", subject_ref, MAX_FIELD_BYTES)?;
+                check_field("caption", caption, MAX_NOTE_BYTES)?;
+                if image.len() > MAX_IMAGE_BYTES {
+                    return Err(GhostError::ImageTooLarge {
+                        len: image.len(),
+                        max: MAX_IMAGE_BYTES,
+                    });
+                }
+                if *width == 0 || *height == 0 || *width > MAX_IMAGE_SIDE || *height > MAX_IMAGE_SIDE || !image_format_ok(*mime, image) {
+                    return Err(GhostError::ImageFormatInvalid);
+                }
+            }
         }
         Ok(())
+    }
+
+    /// SHA-256 (hex) of the attached image, if any: the key under which a
+    /// verifier or a cloud store files the attachment.
+    pub fn image_sha256(&self) -> Option<String> {
+        match &self.body {
+            DocumentBody::ImageDocument { image, .. } => Some(crate::crypto::to_hex(&sha2::Sha256::digest(image))),
+            _ => None,
+        }
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, GhostError> {

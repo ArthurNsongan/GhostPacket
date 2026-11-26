@@ -17,6 +17,9 @@ LZ4 payload (if b0): `[decompressed size u32 LE][LZ4 block]`.
 
 Encrypted payload (if b4, V2): `[salt 16][ChaCha20-Poly1305 ciphertext of the (LZ4 or raw) payload][tag 16]`. Key ‖ nonce = PBKDF2-HMAC-SHA256(NFC(passphrase), salt, 40 000 iterations) → 32 + 12 bytes; AAD = bytes 0..8. The salt is supplied fresh by the caller for every frame. Callers cannot set b0 or b4 themselves (`INVALID_FLAGS`). Details and measurements: `.kiro/specs/platform-v2/design.md`.
 
+### GPKT v2 (version 0x02, V3)
+Same frame with a u32 BE length at offset 6..10 (header 10 bytes): total = 78 + N, N ≤ 131 072, so a v2 frame is at most 131 150 bytes (`MAX_ANY_FRAME_SIZE`). CRC32 covers bytes 0..10+N and the signature bytes 0..14+N. A v2 frame is only produced when the document does not fit in v1 (in practice an `ImageDocument`); v1 frames are unchanged. Decompression is bounded by `MAX_DECOMPRESSED_BYTES_V2` (136 KB) and the image by `MAX_IMAGE_BYTES` (64 KB, enforced while deserializing). A v1 frame relabelled 0x02 fails with `LENGTH_MISMATCH`; any other version byte with `UNSUPPORTED_VERSION`. Transports: ChromaCrypt (any size) and acoustic OFDM (≤ 16 KB). Full design: `.kiro/specs/high-speed-transports/design.md`.
+
 ## Document
 ```rust
 struct GhostDocument {
@@ -29,7 +32,8 @@ enum DocumentBody {
     TontineReceipt { group, member, collector, amount_minor: u64, currency, cycle: u16, note },        // 0x01
     MedicalPrescription { clinic, practitioner, patient_ref, items: Vec<{drug, dosage, days}>, note }, // 0x02
     EmergencyVoucher { program, distributor, beneficiary_ref, items: Vec<{label, quantity, unit}>, valid_until: u64, note }, // 0x03
-    CustomMessage { sender, title, message },                                                       // 0x04 (V2, must stay last)
+    CustomMessage { sender, title, message },                                                       // 0x04 (V2)
+    ImageDocument { title, subject_ref, caption, related_doc_id: [u8; 8], mime: u8, width: u16, height: u16, image: bytes }, // 0x05 (V3, GPKT v2, appended last)
 }
 ```
 Bounds: fields ≤ 64 B, `currency` ≤ 8 B, `unit` ≤ 16 B, `note` ≤ 120 B, `items` ≤ 8. Custom message: `sender` ≤ 48 B, `title` ≤ 60 B, `message` ≤ 240 B, so the worst case fits in 511 B even encrypted.

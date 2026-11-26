@@ -1,8 +1,8 @@
 {
   "name": "ghostpacket-inspector",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "MCP server (stdio) exposing GhostPacket frame inspection, channel benchmarks and Kiroween compliance checks to Kiro.",
+  "description": "MCP server (stdio) exposing GhostPacket frame inspection (v1, v2, encrypted), channel benchmarks (4-FSK, fountain QR, OFDM, ChromaCrypt) and Kiroween compliance checks to Kiro.",
   "license": "MIT",
   "type": "module",
   "engines": {

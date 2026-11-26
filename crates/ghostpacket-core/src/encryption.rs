@@ -51,9 +51,9 @@ fn check_passphrase(passphrase: &[u8]) -> Result<(), GhostError> {
     Ok(())
 }
 
-fn derive(passphrase: &[u8], salt: &[u8; SALT_LEN]) -> Material {
+fn derive(passphrase: &[u8], salt: &[u8; SALT_LEN], iterations: u32) -> Material {
     let mut out = Zeroizing::new([0u8; 44]);
-    pbkdf2::pbkdf2_hmac::<Sha256>(passphrase, salt, PBKDF2_ITERATIONS, out.as_mut());
+    pbkdf2::pbkdf2_hmac::<Sha256>(passphrase, salt, iterations, out.as_mut());
     let mut m = Material {
         key: [0u8; 32],
         nonce: [0u8; 12],
@@ -65,11 +65,16 @@ fn derive(passphrase: &[u8], salt: &[u8; SALT_LEN]) -> Material {
 
 /// Encrypts `plain`; returns `salt || ciphertext || tag`.
 pub fn seal(plain: &[u8], aad: &[u8], passphrase: &[u8], salt: &[u8]) -> Result<Vec<u8>, GhostError> {
+    seal_with(plain, aad, passphrase, salt, PBKDF2_ITERATIONS)
+}
+
+/// [`seal`] with an explicit PBKDF2 work factor (the identity vault uses more).
+pub fn seal_with(plain: &[u8], aad: &[u8], passphrase: &[u8], salt: &[u8], iterations: u32) -> Result<Vec<u8>, GhostError> {
     check_passphrase(passphrase)?;
     let salt: [u8; SALT_LEN] = salt
         .try_into()
         .map_err(|_| GhostError::InvalidSalt { len: salt.len() })?;
-    let m = derive(passphrase, &salt);
+    let m = derive(passphrase, &salt, iterations);
     let cipher = ChaCha20Poly1305::new(&Key::from(m.key));
     let sealed = cipher
         .encrypt(&Nonce::from(m.nonce), Payload { msg: plain, aad })
@@ -84,6 +89,11 @@ pub fn seal(plain: &[u8], aad: &[u8], passphrase: &[u8], salt: &[u8]) -> Result<
 /// any altered byte gives `DECRYPTION_FAILED` and no plaintext. The plaintext
 /// is wiped from memory when dropped (also when later checks reject the frame).
 pub fn open(sealed: &[u8], aad: &[u8], passphrase: &[u8]) -> Result<Zeroizing<Vec<u8>>, GhostError> {
+    open_with(sealed, aad, passphrase, PBKDF2_ITERATIONS)
+}
+
+/// [`open`] with an explicit PBKDF2 work factor.
+pub fn open_with(sealed: &[u8], aad: &[u8], passphrase: &[u8], iterations: u32) -> Result<Zeroizing<Vec<u8>>, GhostError> {
     check_passphrase(passphrase)?;
     if sealed.len() < ENCRYPTION_OVERHEAD {
         return Err(GhostError::DecryptionFailed);
@@ -92,7 +102,7 @@ pub fn open(sealed: &[u8], aad: &[u8], passphrase: &[u8]) -> Result<Zeroizing<Ve
     let salt: [u8; SALT_LEN] = salt_part
         .try_into()
         .map_err(|_| GhostError::DecryptionFailed)?;
-    let m = derive(passphrase, &salt);
+    let m = derive(passphrase, &salt, iterations);
     let cipher = ChaCha20Poly1305::new(&Key::from(m.key));
     cipher
         .decrypt(&Nonce::from(m.nonce), Payload { msg: body, aad })

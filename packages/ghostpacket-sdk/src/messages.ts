@@ -43,6 +43,7 @@ export function docTitle(body: DocumentBody): string {
   if ("tontineReceipt" in body) return "Tontine receipt";
   if ("medicalPrescription" in body) return "Prescription";
   if ("emergencyVoucher" in body) return "Aid voucher";
+  if ("imageDocument" in body) return body.imageDocument.title || "Image";
   return body.customMessage.title || "Message";
 }
 

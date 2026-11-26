@@ -36,6 +36,8 @@ export interface AppFrameProps {
   nav?: React.ReactNode;
   actions?: React.ReactNode;
   footerNote?: React.ReactNode;
+  /** Issuer apps keep their signing key in a passphrase-sealed vault (Rust core). */
+  persistentIdentity?: boolean;
   children: React.ReactNode;
 }
 
@@ -44,7 +46,7 @@ export default function AppFrame(props: AppFrameProps) {
   // Synchronous and idempotent, before any child reads storage.
   setStorageNamespace(props.app === "portal" ? "" : props.app);
   return (
-    <GhostProvider>
+    <GhostProvider persistent={props.persistentIdentity}>
       <Frame {...props} />
     </GhostProvider>
   );
@@ -126,7 +128,7 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
       <footer className="mx-auto mt-6 flex max-w-[1500px] flex-wrap justify-between gap-2 border-t border-grid px-4 py-5 text-[11px] text-mute sm:px-8">
         <span>
           ghostpacket-core {ghost?.core.version ?? "…"} · WASM loaded {loadMs === null ? "…" : `in ${loadMs.toFixed(0)} ms`} · 0 network calls · signing key{" "}
-          {ghost ? <span className="font-mono text-ion">{ghost.keyInfo.fingerprint}</span> : "…"} generated in this tab
+          {ghost ? <span className="font-mono text-ion">{ghost.keyInfo.fingerprint}</span> : "…"} {ghost?.identity === "vault" ? "unlocked from this device's vault" : "generated in this tab"}
         </span>
         <span>{footerNote ?? "Frame ≤ 512 B · Ed25519 · CRC32 · ChaCha20-Poly1305 · Reed-Solomon · Luby Transform · MIT"}</span>
       </footer>

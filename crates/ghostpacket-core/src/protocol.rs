@@ -4,13 +4,16 @@
 //! Offset  Size  Field
 //! 0       4     Sync preamble "GPKT" (0x47 0x50 0x4B 0x54)
 //! 4       1     Version = 0x01
-//! 5       1     Flags: b0 LZ4 | b1 FSK | b2 Fountain | b3 Demo | b4..b7 reserved = 0
+//! 5       1     Flags: b0 LZ4 | b1 FSK | b2 Fountain | b3 Demo | b4 Encrypted | b5..b7 reserved = 0
 //! 6       2     Payload length N (u16 BE, 1..=436)
 //! 8       N     Payload (postcard document, LZ4 block with u32 LE size prefix if b0)
 //! 8+N     4     CRC32 (IEEE) of bytes 0..8+N
 //! 12+N    64    Ed25519 signature of bytes 0..12+N
 //! ```
 //! Total = 76 + N bytes, at most 512.
+//!
+//! GPKT v2 (version 0x02) is identical except for a u32 BE payload length at
+//! offset 6..10: total = 78 + N bytes, N ≤ 128 KB (documents with an image).
 
 use serde::Serialize;
 
@@ -30,6 +33,17 @@ pub const MAX_PAYLOAD_LEN: usize = MAX_FRAME_SIZE - OVERHEAD; // 436
 pub const MIN_FRAME_SIZE: usize = OVERHEAD + 1; // 77
 pub const MAX_DECOMPRESSED_BYTES: usize = 4096;
 
+/// GPKT v2: same frame with a u32 payload length, for documents that carry an
+/// image (streamed over ChromaCrypt or the fountain). v1 frames are unchanged.
+pub const VERSION_V2: u8 = 0x02;
+pub const HEADER_LEN_V2: usize = 10;
+pub const OVERHEAD_V2: usize = HEADER_LEN_V2 + CRC_LEN + SIGNATURE_LEN; // 78
+pub const MAX_PAYLOAD_LEN_V2: usize = 128 * 1024;
+pub const MAX_FRAME_SIZE_V2: usize = OVERHEAD_V2 + MAX_PAYLOAD_LEN_V2; // 131 150
+pub const MAX_DECOMPRESSED_BYTES_V2: usize = 136 * 1024;
+/// Largest frame of any version, for transports and servers that bound input.
+pub const MAX_ANY_FRAME_SIZE: usize = MAX_FRAME_SIZE_V2;
+
 pub const FLAG_LZ4: u8 = 0b0000_0001;
 pub const FLAG_FSK: u8 = 0b0000_0010;
 pub const FLAG_FOUNTAIN: u8 = 0b0000_0100;
@@ -38,6 +52,57 @@ pub const FLAG_ENCRYPTED: u8 = 0b0001_0000;
 pub const FLAGS_RESERVED: u8 = 0b1110_0000;
 /// Flags a caller may request; LZ4 and ENCRYPTED are decided by the encoder.
 pub const FLAGS_CALLER: u8 = FLAG_FSK | FLAG_FOUNTAIN | FLAG_DEMO;
+
+/// Per-version frame geometry and bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Layout {
+    version: u8,
+    header_len: usize,
+    max_payload: usize,
+    max_frame: usize,
+    max_decompressed: usize,
+}
+
+const V1: Layout = Layout {
+    version: VERSION,
+    header_len: HEADER_LEN,
+    max_payload: MAX_PAYLOAD_LEN,
+    max_frame: MAX_FRAME_SIZE,
+    max_decompressed: MAX_DECOMPRESSED_BYTES,
+};
+
+const V2: Layout = Layout {
+    version: VERSION_V2,
+    header_len: HEADER_LEN_V2,
+    max_payload: MAX_PAYLOAD_LEN_V2,
+    max_frame: MAX_FRAME_SIZE_V2,
+    max_decompressed: MAX_DECOMPRESSED_BYTES_V2,
+};
+
+impl Layout {
+    fn overhead(self) -> usize {
+        self.header_len + CRC_LEN + SIGNATURE_LEN
+    }
+
+    fn write_len(self, out: &mut Vec<u8>, n: usize) -> Result<(), GhostError> {
+        if self.version == VERSION {
+            let v = u16::try_from(n).map_err(|_| GhostError::PayloadTooLarge { len: n })?;
+            out.extend_from_slice(&v.to_be_bytes());
+        } else {
+            let v = u32::try_from(n).map_err(|_| GhostError::PayloadTooLarge { len: n })?;
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        Ok(())
+    }
+
+    fn read_len(self, frame: &[u8]) -> Result<usize, GhostError> {
+        if self.version == VERSION {
+            Ok(u16::from_be_bytes([byte(frame, 6)?, byte(frame, 7)?]) as usize)
+        } else {
+            Ok(read_u32(frame, 6)? as usize)
+        }
+    }
+}
 
 /// Passphrase and fresh 16-byte salt for an encrypted frame.
 pub struct Encryption<'a> {
@@ -50,6 +115,7 @@ pub struct Encryption<'a> {
 pub struct EncodedFrame {
     #[serde(skip)]
     pub bytes: Vec<u8>,
+    pub version: u8,
     pub frame_len: usize,
     pub serialized_len: usize,
     pub payload_len: usize,
@@ -65,6 +131,7 @@ pub struct EncodedFrame {
 #[serde(rename_all = "camelCase")]
 pub struct VerifiedFrame {
     pub document: GhostDocument,
+    pub version: u8,
     pub doc_type: u8,
     pub frame_len: usize,
     pub payload_len: usize,
@@ -76,6 +143,8 @@ pub struct VerifiedFrame {
     pub issuer_pubkey_hex: String,
     pub fingerprint: String,
     pub trusted_issuer: bool,
+    /// SHA-256 (hex) of the attached image, if the document carries one.
+    pub image_sha256: Option<String>,
 }
 
 /// Builds, compresses, checksums and signs a plaintext frame.
@@ -87,14 +156,34 @@ pub fn encode_frame(
     encode_frame_with(draft, signing_seed, caller_flags, None)
 }
 
-/// Builds a frame, optionally encrypting the payload, then checksums and signs
-/// it. The signature covers the ciphertext, so a receiver without the
-/// passphrase can still reject a tampered frame by its CRC32.
+/// Builds a v1 frame (≤ 512 bytes), optionally encrypting the payload, then
+/// checksums and signs it. The signature covers the ciphertext, so a receiver
+/// without the passphrase can still reject a tampered frame by its CRC32.
 pub fn encode_frame_with(
     draft: DocumentDraft,
     signing_seed: &[u8],
     caller_flags: u8,
     encryption: Option<Encryption<'_>>,
+) -> Result<EncodedFrame, GhostError> {
+    encode_layout(draft, signing_seed, caller_flags, encryption, V1)
+}
+
+/// Builds a GPKT v2 frame (payload up to 128 KB), e.g. a document with an image.
+pub fn encode_frame_v2_with(
+    draft: DocumentDraft,
+    signing_seed: &[u8],
+    caller_flags: u8,
+    encryption: Option<Encryption<'_>>,
+) -> Result<EncodedFrame, GhostError> {
+    encode_layout(draft, signing_seed, caller_flags, encryption, V2)
+}
+
+fn encode_layout(
+    draft: DocumentDraft,
+    signing_seed: &[u8],
+    caller_flags: u8,
+    encryption: Option<Encryption<'_>>,
+    layout: Layout,
 ) -> Result<EncodedFrame, GhostError> {
     if caller_flags & !FLAGS_CALLER != 0 {
         return Err(GhostError::InvalidFlags {
@@ -105,7 +194,7 @@ pub fn encode_frame_with(
     let pubkey = keypair.public_key();
     let document = GhostDocument::from_draft(draft, pubkey);
     let serialized = document.to_bytes()?;
-    if serialized.len() > MAX_DECOMPRESSED_BYTES {
+    if serialized.len() > layout.max_decompressed {
         return Err(GhostError::DecompressedTooLarge {
             len: serialized.len(),
         });
@@ -124,17 +213,17 @@ pub fn encode_frame_with(
     let encrypted = encryption.is_some();
     let n = inner.len() + if encrypted { ENCRYPTION_OVERHEAD } else { 0 };
     // Size is checked before encrypting: nothing is spent on a frame that cannot ship.
-    if n > MAX_PAYLOAD_LEN {
+    if n > layout.max_payload {
         return Err(GhostError::PayloadTooLarge { len: n });
     }
     let flags = caller_flags
         | if compressed { FLAG_LZ4 } else { 0 }
         | if encrypted { FLAG_ENCRYPTED } else { 0 };
-    let mut frame = Vec::with_capacity(OVERHEAD + n);
+    let mut frame = Vec::with_capacity(layout.overhead() + n);
     frame.extend_from_slice(&PREAMBLE);
-    frame.push(VERSION);
+    frame.push(layout.version);
     frame.push(flags);
-    frame.extend_from_slice(&(n as u16).to_be_bytes());
+    layout.write_len(&mut frame, n)?;
     let payload = match encryption {
         Some(e) => encryption::seal(&inner, &frame, e.passphrase, e.salt)?,
         None => inner,
@@ -149,6 +238,7 @@ pub fn encode_frame_with(
     frame.extend_from_slice(&signature);
 
     Ok(EncodedFrame {
+        version: layout.version,
         frame_len: frame.len(),
         bytes: frame,
         serialized_len: serialized.len(),
@@ -170,7 +260,7 @@ pub fn decode_and_verify_frame(
     decode_and_verify_frame_with(frame, trusted, None)
 }
 
-/// Verifies a frame in the order fixed by the spec and returns the document:
+/// Verifies a v1 or v2 frame in the order fixed by the spec and returns the document:
 /// size → preamble → version/flags → length → CRC32 → decrypt (if encrypted)
 /// → bounded LZ4 → schema → keyring → strict Ed25519.
 ///
@@ -182,8 +272,9 @@ pub fn decode_and_verify_frame_with(
 ) -> Result<VerifiedFrame, GhostError> {
     let header = check_structure(frame)?;
     let n = header.payload_len;
+    let h = header.layout.header_len;
 
-    let crc_offset = HEADER_LEN + n;
+    let crc_offset = h + n;
     let actual_crc = crc32fast::hash(slice(frame, 0, crc_offset)?);
     let expected_crc = read_u32(frame, crc_offset)?;
     if actual_crc != expected_crc {
@@ -193,18 +284,18 @@ pub fn decode_and_verify_frame_with(
         });
     }
 
-    let payload = slice(frame, HEADER_LEN, crc_offset)?;
+    let payload = slice(frame, h, crc_offset)?;
     let encrypted = header.flags & FLAG_ENCRYPTED != 0;
     // Decrypted bytes are wiped on drop, including when a later step rejects the frame.
     let inner = if encrypted {
         let pass = passphrase.ok_or(GhostError::PassphraseRequired)?;
-        encryption::open(payload, slice(frame, 0, HEADER_LEN)?, pass)?
+        encryption::open(payload, slice(frame, 0, h)?, pass)?
     } else {
         Zeroizing::new(payload.to_vec())
     };
     let compressed = header.flags & FLAG_LZ4 != 0;
     let serialized = if compressed {
-        Zeroizing::new(decompress_payload(&inner)?)
+        Zeroizing::new(decompress_payload(&inner, header.layout.max_decompressed)?)
     } else {
         inner
     };
@@ -222,6 +313,7 @@ pub fn decode_and_verify_frame_with(
     crypto::verify(&issuer, signed, signature)?;
 
     Ok(VerifiedFrame {
+        version: header.layout.version,
         doc_type: document.doc_type(),
         frame_len: frame.len(),
         payload_len: n,
@@ -233,11 +325,13 @@ pub fn decode_and_verify_frame_with(
         issuer_pubkey_hex: crypto::to_hex(&issuer),
         fingerprint: crypto::fingerprint(&issuer),
         trusted_issuer,
+        image_sha256: document.image_sha256(),
         document,
     })
 }
 
 struct Header {
+    layout: Layout,
     flags: u8,
     payload_len: usize,
 }
@@ -248,31 +342,35 @@ fn check_structure(frame: &[u8]) -> Result<Header, GhostError> {
     if len < MIN_FRAME_SIZE {
         return Err(GhostError::FrameTooShort { len });
     }
-    if len > MAX_FRAME_SIZE {
+    if len > MAX_ANY_FRAME_SIZE {
         return Err(GhostError::FrameTooLarge { len });
     }
     if slice(frame, 0, 4)? != PREAMBLE {
         return Err(GhostError::InvalidPreamble);
     }
     let version = byte(frame, 4)?;
-    if version != VERSION {
-        return Err(GhostError::UnsupportedVersion { version });
+    let layout = match version {
+        VERSION => V1,
+        VERSION_V2 => V2,
+        _ => return Err(GhostError::UnsupportedVersion { version }),
+    };
+    if len > layout.max_frame {
+        return Err(GhostError::FrameTooLarge { len });
     }
     let flags = byte(frame, 5)?;
     if flags & FLAGS_RESERVED != 0 {
         return Err(GhostError::InvalidFlags { flags });
     }
-    let n = u16::from_be_bytes([byte(frame, 6)?, byte(frame, 7)?]) as usize;
+    let n = layout.read_len(frame)?;
     if n == 0 {
         return Err(GhostError::PayloadEmpty);
     }
-    if OVERHEAD + n != len {
-        return Err(GhostError::LengthMismatch {
-            declared: OVERHEAD + n,
-            actual: len,
-        });
+    let declared = layout.overhead().checked_add(n).ok_or(GhostError::LengthMismatch { declared: usize::MAX, actual: len })?;
+    if n > layout.max_payload || declared != len {
+        return Err(GhostError::LengthMismatch { declared, actual: len });
     }
     Ok(Header {
+        layout,
         flags,
         payload_len: n,
     })
@@ -288,14 +386,14 @@ fn compress_payload(raw: &[u8]) -> Result<Vec<u8>, GhostError> {
 }
 
 /// LZ4 block with u32 LE size prefix. The declared size is checked against
-/// `MAX_DECOMPRESSED_BYTES` before any allocation (anti LZ4 bomb).
-fn decompress_payload(payload: &[u8]) -> Result<Vec<u8>, GhostError> {
+/// the version's bound (4 KB in v1, 136 KB in v2) before any allocation (anti LZ4 bomb).
+fn decompress_payload(payload: &[u8], max: usize) -> Result<Vec<u8>, GhostError> {
     let size_bytes: [u8; 4] = slice(payload, 0, 4)
         .map_err(|_| GhostError::Lz4DecompressionFailed)?
         .try_into()
         .map_err(|_| GhostError::Lz4DecompressionFailed)?;
     let declared = u32::from_le_bytes(size_bytes) as usize;
-    if declared > MAX_DECOMPRESSED_BYTES {
+    if declared > max {
         return Err(GhostError::DecompressedTooLarge { len: declared });
     }
     if declared == 0 {
@@ -356,7 +454,7 @@ pub fn inspect_frame_with(frame: &[u8], passphrase: Option<&[u8]>) -> FrameInspe
             name: "version",
             offset: 4,
             len: 1,
-            valid: Some(*v == VERSION),
+            valid: Some(*v == VERSION || *v == VERSION_V2),
             detail: format!("0x{v:02X}"),
         });
     }
@@ -385,34 +483,34 @@ pub fn inspect_frame_with(frame: &[u8], passphrase: Option<&[u8]>) -> FrameInspe
             detail: format!("0x{f:02X} {}", names.join("|")),
         });
     }
-    let declared = match (frame.get(6), frame.get(7)) {
-        (Some(a), Some(b)) => Some(u16::from_be_bytes([*a, *b]) as usize),
-        _ => None,
-    };
+    let layout = if frame.get(4) == Some(&VERSION_V2) { V2 } else { V1 };
+    let len_bytes = layout.header_len - 6;
+    let declared = if frame.len() >= layout.header_len { layout.read_len(frame).ok() } else { None };
+    let header_len = layout.header_len;
     if let Some(n) = declared {
         fields.push(FieldSpan {
             name: "length",
             offset: 6,
-            len: 2,
-            valid: Some((1..=MAX_PAYLOAD_LEN).contains(&n) && OVERHEAD + n == len),
+            len: len_bytes,
+            valid: Some((1..=layout.max_payload).contains(&n) && layout.overhead().checked_add(n) == Some(len)),
             detail: format!("N = {n}"),
         });
-        let payload_end = (HEADER_LEN + n).min(len);
-        if payload_end > HEADER_LEN {
+        let payload_end = header_len.saturating_add(n).min(len);
+        if payload_end > header_len {
             let enc = frame.get(5).is_some_and(|f| f & FLAG_ENCRYPTED != 0);
             fields.push(FieldSpan {
                 name: "payload",
-                offset: HEADER_LEN,
-                len: payload_end - HEADER_LEN,
+                offset: header_len,
+                len: payload_end - header_len,
                 valid: None,
                 detail: if enc {
-                    format!("{} bytes · ENC ChaCha20-Poly1305", payload_end - HEADER_LEN)
+                    format!("{} bytes · ENC ChaCha20-Poly1305", payload_end - header_len)
                 } else {
-                    format!("{} bytes", payload_end - HEADER_LEN)
+                    format!("{} bytes", payload_end - header_len)
                 },
             });
         }
-        let crc_off = HEADER_LEN + n;
+        let crc_off = header_len.saturating_add(n);
         if let (Some(region), Ok(stored)) = (frame.get(0..crc_off), read_u32(frame, crc_off)) {
             let actual = crc32fast::hash(region);
             fields.push(FieldSpan {
@@ -423,7 +521,7 @@ pub fn inspect_frame_with(frame: &[u8], passphrase: Option<&[u8]>) -> FrameInspe
                 detail: format!("stored 0x{stored:08X} / computed 0x{actual:08X}"),
             });
         }
-        let sig_off = crc_off + CRC_LEN;
+        let sig_off = crc_off.saturating_add(CRC_LEN);
         if sig_off < len {
             let sig_len = (len - sig_off).min(SIGNATURE_LEN);
             fields.push(FieldSpan {
@@ -458,7 +556,9 @@ pub fn inspect_frame_with(frame: &[u8], passphrase: Option<&[u8]>) -> FrameInspe
                 | GhostError::DecompressedTooLarge { .. }
                 | GhostError::SchemaDecodeFailed
                 | GhostError::FieldTooLong { .. }
-                | GhostError::TooManyItems { .. },
+                | GhostError::TooManyItems { .. }
+                | GhostError::ImageTooLarge { .. }
+                | GhostError::ImageFormatInvalid,
             ) => Some(false),
             Err(_) => None,
         };

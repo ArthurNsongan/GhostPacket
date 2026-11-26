@@ -3,7 +3,21 @@
 import { assets } from "./assets";
 import { modemBusy } from "./modem-activity";
 import type { Core, Result } from "./wasm-bridge";
-import type { FskDecodeResult, FskMode } from "./types";
+import type { AcousticMode, FskDecodeResult, OfdmDecodeResult } from "./types";
+
+/** Modulates with the 4-FSK modem (robust / fast) or the OFDM modem. */
+function modulate(core: Core, frame: Uint8Array, sampleRate: number, mode: AcousticMode): Result<Float32Array> {
+  return mode === "ofdm" ? core.ofdmModulate(frame, sampleRate) : core.fskModulate(frame, sampleRate, mode);
+}
+
+export type AcousticDecode = FskDecodeResult | OfdmDecodeResult;
+
+function demodulate(core: Core, samples: Float32Array, sampleRate: number, mode: AcousticMode): Result<AcousticDecode> {
+  return mode === "ofdm" ? core.ofdmDemodulate(samples, sampleRate) : core.fskDemodulate(samples, sampleRate, mode);
+}
+
+const INCOMPLETE = new Set(["FSK_INCOMPLETE", "OFDM_INCOMPLETE"]);
+const NOTHING_YET = new Set(["FSK_NO_PREAMBLE", "FSK_TOO_SHORT", "OFDM_NO_PREAMBLE"]);
 
 export const FFT_SIZE = 1024;
 /** Squelch threshold: 1.6× the noise floor in RMS (≈ 4 dB), never below −74 dBFS. */
@@ -42,7 +56,7 @@ function abortError(): DOMException {
 }
 
 export interface LoopbackOptions {
-  mode: FskMode;
+  mode: AcousticMode;
   snrDb: number;
   seed: number;
   /** Plays the noisy signal on the speakers while it is "received". */
@@ -55,7 +69,7 @@ export interface LoopbackOptions {
 }
 
 export interface LoopbackOutcome {
-  result: Result<FskDecodeResult>;
+  result: Result<AcousticDecode>;
   sampleRate: number;
   burstSamples: number;
   /** Real time the transmission took, in ms. */
@@ -70,7 +84,7 @@ export interface LoopbackOutcome {
  */
 export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: LoopbackOptions): Promise<LoopbackOutcome> {
   const sampleRate = 48_000;
-  const modulated = core.fskModulate(frame, sampleRate, opts.mode);
+  const modulated = modulate(core, frame, sampleRate, opts.mode);
   if (!modulated.ok) return { result: modulated, sampleRate, burstSamples: 0, elapsedMs: 0, audioPlayed: false };
   const pcm = modulated.value;
 
@@ -120,7 +134,7 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
   let jamApplied = false;
   let lastProbe = 0;
   const probeEvery = 250;
-  const preambleSamples = sampleRate * (opts.mode === "fast" ? 0.006 : 0.015) * 45;
+  const preambleSamples = opts.mode === "ofdm" ? sampleRate * 0.06 : sampleRate * (opts.mode === "fast" ? 0.006 : 0.015) * 45;
 
   await new Promise<void>((resolve, reject) => {
     const onAbort = () => {
@@ -141,8 +155,8 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
       }
       if (!syncLocked && cursor > lead + preambleSamples && now - lastProbe > probeEvery) {
         lastProbe = now;
-        const probe = core.fskDemodulate(rx.subarray(0, cursor), sampleRate, opts.mode);
-        syncLocked = probe.ok || probe.error.code === "FSK_INCOMPLETE";
+        const probe = demodulate(core, rx.subarray(0, cursor), sampleRate, opts.mode);
+        syncLocked = probe.ok || INCOMPLETE.has(probe.error.code);
       }
       opts.onTick?.({ window: tail(rx, cursor, FFT_SIZE), cursor, total, sampleRate, syncLocked });
       if (cursor >= total) {
@@ -155,7 +169,7 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
     requestAnimationFrame(step);
   });
 
-  const result = core.fskDemodulate(rx, sampleRate, opts.mode);
+  const result = demodulate(core, rx, sampleRate, opts.mode);
   return { result, sampleRate, burstSamples: pcm.length, elapsedMs: performance.now() - t0, audioPlayed };
 }
 
@@ -168,14 +182,14 @@ function wallClock(sampleRate: number): () => number {
 export async function playBurst(
   core: Core,
   frame: Uint8Array,
-  mode: FskMode,
+  mode: AcousticMode,
   opts: { volume?: number; signal?: AbortSignal; onTick?: (tick: AcousticTick) => void } = {},
 ): Promise<Result<number>> {
   const ctx = await audioContext();
   // Synthesize at ≤ 48 kHz (MAX_SAMPLES is a sample count: a 96 kHz robust burst
   // would exceed it). The AudioBuffer carries its own rate; the browser resamples.
   const sampleRate = Math.min(ctx.sampleRate, 48_000);
-  const modulated = core.fskModulate(frame, sampleRate, mode);
+  const modulated = modulate(core, frame, sampleRate, mode);
   if (!modulated.ok) return modulated;
   const pcm = modulated.value;
   const buffer = ctx.createBuffer(1, pcm.length, sampleRate);
@@ -226,7 +240,7 @@ export type MicStatus = "listening" | "sync" | "decoded" | "error";
 export interface MicCallbacks {
   onTick?: (tick: AcousticTick) => void;
   onStatus?: (status: MicStatus, detail?: string) => void;
-  onFrame?: (frame: Uint8Array, info: FskDecodeResult) => void;
+  onFrame?: (frame: Uint8Array, info: AcousticDecode) => void;
 }
 
 /**
@@ -254,7 +268,7 @@ export class MicReceiver {
 
   constructor(
     private readonly core: Core,
-    private readonly mode: FskMode,
+    private readonly mode: AcousticMode,
     private readonly cb: MicCallbacks,
   ) {}
 
@@ -289,7 +303,8 @@ export class MicReceiver {
     }
     this.stream = stream;
     this.source = ctx.createMediaStreamSource(this.stream);
-    const seconds = this.mode === "fast" ? 14 : 38;
+    // OFDM frames reach 16 KB (≈ 33 s of audio); FSK frames stay ≤ 512 B.
+    const seconds = this.mode === "fast" ? 14 : this.mode === "ofdm" ? 40 : 38;
     this.ring = new Float32Array(Math.min(Math.ceil(seconds * this.sampleRate), this.core.limits.maxSamples));
     this.written = 0;
 
@@ -397,7 +412,7 @@ export class MicReceiver {
       return;
     }
     const buf = this.latest(this.ring.length);
-    const res = this.core.fskDemodulate(buf, this.sampleRate, this.mode);
+    const res = demodulate(this.core, buf, this.sampleRate, this.mode);
     if (res.ok) {
       const frame = res.value.frame;
       let hex = "";
@@ -409,8 +424,8 @@ export class MicReceiver {
       }
       return;
     }
-    if (res.error.code === "FSK_INCOMPLETE") this.cb.onStatus?.("sync");
-    else if (res.error.code === "FSK_NO_PREAMBLE" || res.error.code === "FSK_TOO_SHORT") this.cb.onStatus?.("listening");
+    if (INCOMPLETE.has(res.error.code)) this.cb.onStatus?.("sync");
+    else if (NOTHING_YET.has(res.error.code)) this.cb.onStatus?.("listening");
     // Anything else (FEC_UNCORRECTABLE, TOO_MANY_SAMPLES, …) is shown, never hidden as "listening".
     else this.cb.onStatus?.("error", `${res.error.code}: ${res.error.message}`);
   }

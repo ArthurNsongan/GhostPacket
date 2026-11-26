@@ -2,6 +2,46 @@
 /* eslint-disable */
 
 /**
+ * Receiver: camera image → matrix → droplet → wide fountain.
+ */
+export class ChromaRx {
+    free(): void;
+    [Symbol.dispose](): void;
+    decodedMap(): Uint8Array;
+    frame(): Uint8Array;
+    /**
+     * Feeds a droplet directly (virtual loopback without pixels).
+     */
+    ingest(droplet: Uint8Array | number[]): any;
+    constructor();
+    /**
+     * Bytes known so far (unknown blocks zero), for progressive image reveal only.
+     */
+    partial(): Uint8Array;
+    reset(): void;
+    /**
+     * Reads one RGBA camera image. Never throws on an unreadable image:
+     * `found` is false with an `errorCode` (CHROMA_NOT_FOUND, CHROMA_UNCORRECTABLE…).
+     */
+    scan(rgba: Uint8Array | number[], width: number, height: number): any;
+}
+
+/**
+ * Emitter: splits a (v1 or v2) frame into wide-fountain droplets, one per matrix.
+ */
+export class ChromaTx {
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * `GRID × GRID` palette indices (0..8, bits r g b) of the matrix for droplet `seed`.
+     */
+    cells(seed: number): Uint8Array;
+    droplet(seed: number): Uint8Array;
+    k(): number;
+    constructor(frame: Uint8Array | number[], session: number);
+}
+
+/**
  * Fountain decoder (receiver side of the optical channel).
  */
 export class FountainRx {
@@ -38,6 +78,11 @@ export class Spectrum {
 }
 
 /**
+ * Palette index → [r, g, b] for the renderer.
+ */
+export function chroma_palette(): Uint8Array;
+
+/**
  * Crate version, for the UI footer and the MCP inspector.
  */
 export function core_version(): string;
@@ -57,6 +102,11 @@ export function decode_frame(frame: Uint8Array | number[], trusted_hex: any, pas
  * (ChaCha20-Poly1305, FLAG_ENCRYPTED). Returns metadata plus `frame: Uint8Array`.
  */
 export function encode_document(draft: any, signing_seed: Uint8Array | number[], flags: number, passphrase?: string | null, salt?: Uint8Array | number[] | null): any;
+
+/**
+ * Like `encode_document`, but builds a GPKT v2 frame (payload up to 128 KB).
+ */
+export function encode_document_v2(draft: any, signing_seed: Uint8Array | number[], flags: number, passphrase?: string | null, salt?: Uint8Array | number[] | null): any;
 
 /**
  * Fingerprint of a 64-char hex Ed25519 public key (keyring / identity QR).
@@ -109,17 +159,59 @@ export function key_info(seed: Uint8Array | number[]): any;
  */
 export function limits(): any;
 
+export function ofdm_burst_seconds(frame_len: number, sample_rate: number): number;
+
+/**
+ * Finds and decodes one OFDM burst. Returns metadata plus `frame: Uint8Array`.
+ */
+export function ofdm_demodulate(samples: Float32Array | number[], sample_rate: number): any;
+
+/**
+ * PCM burst (32-carrier DQPSK OFDM, ≈ 4 kbit/s) for a frame up to 16 KB.
+ */
+export function ofdm_modulate(frame: Uint8Array | number[], sample_rate: number): Float32Array;
+
+/**
+ * Public key and fingerprint stored in a vault (shown on the unlock screen).
+ */
+export function vault_identity(vault_bytes: Uint8Array | number[]): any;
+
+/**
+ * Opens a vault; `VAULT_INVALID` on a wrong passphrase or any altered byte.
+ */
+export function vault_open(vault_bytes: Uint8Array | number[], passphrase: string): Uint8Array;
+
+/**
+ * Seals a 32-byte signing seed under a passphrase (≥ 10 bytes) with a fresh 16-byte salt.
+ */
+export function vault_seal(seed: Uint8Array | number[], passphrase: string, salt: Uint8Array | number[]): Uint8Array;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_chromarx_free: (a: number, b: number) => void;
+    readonly __wbg_chromatx_free: (a: number, b: number) => void;
     readonly __wbg_fountainrx_free: (a: number, b: number) => void;
     readonly __wbg_fountaintx_free: (a: number, b: number) => void;
     readonly __wbg_spectrum_free: (a: number, b: number) => void;
+    readonly chroma_palette: () => [number, number];
+    readonly chromarx_decodedMap: (a: number) => [number, number];
+    readonly chromarx_frame: (a: number) => [number, number, number, number];
+    readonly chromarx_ingest: (a: number, b: number, c: number) => [number, number, number];
+    readonly chromarx_new: () => number;
+    readonly chromarx_partial: (a: number) => [number, number];
+    readonly chromarx_reset: (a: number) => void;
+    readonly chromarx_scan: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly chromatx_cells: (a: number, b: number) => [number, number, number, number];
+    readonly chromatx_droplet: (a: number, b: number) => [number, number];
+    readonly chromatx_k: (a: number) => number;
+    readonly chromatx_new: (a: number, b: number, c: number) => [number, number, number];
     readonly core_version: () => [number, number];
     readonly crc32: (a: number, b: number) => number;
     readonly decode_frame: (a: number, b: number, c: any, d: number, e: number) => [number, number, number];
     readonly encode_document: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+    readonly encode_document_v2: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly fingerprint_of: (a: number, b: number) => [number, number, number, number];
     readonly flip_bit: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly fountainrx_frame: (a: number) => [number, number, number, number];
@@ -140,8 +232,14 @@ export interface InitOutput {
     readonly is_dropped: (a: number, b: number, c: number) => number;
     readonly key_info: (a: number, b: number) => [number, number, number];
     readonly limits: () => [number, number, number];
+    readonly ofdm_burst_seconds: (a: number, b: number) => number;
+    readonly ofdm_demodulate: (a: number, b: number, c: number) => [number, number, number];
+    readonly ofdm_modulate: (a: number, b: number, c: number) => [number, number, number, number];
     readonly spectrum_compute: (a: number, b: number, c: number) => [number, number];
     readonly spectrum_new: (a: number) => [number, number, number];
+    readonly vault_identity: (a: number, b: number) => [number, number, number];
+    readonly vault_open: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly vault_seal: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;

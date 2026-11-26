@@ -112,8 +112,13 @@ fn structural_errors_have_explicit_codes() {
     assert_eq!(decode_and_verify_frame(&bad, &[]).unwrap_err().code(), "INVALID_PREAMBLE");
 
     let mut bad = frame.clone();
-    bad[4] = 0x02;
+    bad[4] = 0x03;
     assert_eq!(decode_and_verify_frame(&bad, &[]).unwrap_err().code(), "UNSUPPORTED_VERSION");
+
+    // A v1 frame relabelled as v2 is read with the v2 (u32) length: it cannot match.
+    let mut bad = frame.clone();
+    bad[4] = 0x02;
+    assert_eq!(decode_and_verify_frame(&bad, &[]).unwrap_err().code(), "LENGTH_MISMATCH");
 
     let mut bad = frame.clone();
     bad[5] |= 0x80;

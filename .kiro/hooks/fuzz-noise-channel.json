@@ -3,14 +3,14 @@
   "hooks": [
     {
       "name": "fuzz-noise-channel",
-      "description": "On every codec change in the Rust crate: fuzz the acoustic channel (white noise 20 → 6 dB SNR, random mic gain, 44.1/48 kHz, ±300 ppm clock drift, room echo) and the optical channel (100 seeds, 30/40/50 % of QR frames lost).",
       "trigger": "PostFileSave",
+      "description": "On every codec change in the Rust crate: fuzz the acoustic channels (4-FSK: white noise 20 → 6 dB SNR, random mic gain, 44.1/48 kHz, ±300 ppm drift, room echo; OFDM: 12–20 dB SNR, echo, ±300 ppm drift on 33 s bursts, clipping), the optical fountain (100 seeds, 30/40/50 % lost) and GPKT v2 / ChromaCrypt / wide fountain / vault.",
       "matcher": "crates[\\\\/]ghostpacket-core[\\\\/]src[\\\\/].*\\.rs$",
       "action": {
         "type": "command",
-        "command": "cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml --test noise_fsk_fuzz --test optical_fountain_fuzz -- --nocapture"
-      },
-      "timeout": 600
+        "command": "cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml --lib --test noise_fsk_fuzz --test optical_fountain_fuzz --test noise_ofdm_fuzz --test gpkt_v2",
+        "timeout": 600
+      }
     }
   ]
 }

@@ -5,7 +5,7 @@ import "./clinic-store";
 import { useEffect, useMemo, useState } from "react";
 
 import { findRedemption, guardScope, onLedgerChange, readLedger, redeemOnce, type LedgerCheck } from "ghostpacket-sdk/ledger";
-import { redemptionGate } from "ghostpacket-sdk/redemption-policy";
+import { issuerPinned, redemptionGate } from "ghostpacket-sdk/redemption-policy";
 import { docIdBytes, freeId, shortId } from "ghostpacket-sdk/records";
 import { FLAG_FOUNTAIN, FLAG_FSK, type Channel, type DocumentDraft, type FskMode, type PrescriptionItem, type VerifiedFrame } from "ghostpacket-sdk/types";
 import type { Result } from "ghostpacket-sdk/wasm-bridge";
@@ -18,6 +18,9 @@ import IssuerGate from "ghostpacket-ui/IssuerGate";
 import { EncryptionToggle, encryptionBlocked, type EncryptionSetting } from "ghostpacket-ui/MessageComposer";
 import ProofOutboxPanel from "ghostpacket-ui/ProofOutboxPanel";
 import ResultCard from "ghostpacket-ui/ResultCard";
+import ImageAttach, { type ImageSource } from "ghostpacket-ui/ImageAttach";
+import SpectralImageReveal from "ghostpacket-ui/SpectralImageReveal";
+import type { ImageBudget } from "ghostpacket-sdk/image-codec";
 
 import { fromB64, patients, prescriptions, saveSettings, seedOnce, settings, toB64, type IssuedRx, type Patient } from "./clinic-store";
 
@@ -66,6 +69,13 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
   const [encryption, setEncryption] = useState<EncryptionSetting>({ on: false, passphrase: "" });
   const [sealed, setSealed] = useState<IssuedRx | null>(null);
   const [sealError, setSealError] = useState<string | null>(null);
+  // Clinical photo attached to the prescription (GPKT v2, ChromaCrypt / OFDM).
+  const [photoSrc, setPhotoSrc] = useState<{ source: ImageSource; budget: ImageBudget } | null>(null);
+  const [photoCaption, setPhotoCaption] = useState("Malaria RDT, two lines");
+  const [photo, setPhoto] = useState<{ frame: Uint8Array; docId: string; rx: string; encrypted: boolean } | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [reveal, setReveal] = useState<boolean[]>([]);
 
   // Pharmacy side.
   const [passphrase, setPassphrase] = useState("");
@@ -119,8 +129,24 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
     setSealed(prescriptions.get(docId) ?? null);
   };
 
+  const sealPhoto = async () => {
+    if (!photoSrc || !sealed || !patient) return;
+    setPhotoBusy(true);
+    setPhotoError(null);
+    const docId = `IMG-${sealed.docId.slice(3, 7)}`;
+    const res = await sdk.sealImage(
+      photoSrc.source,
+      { title: "Clinical photo", subjectRef: `${patient.id} (${patient.sex}, ${patient.age} y)`, caption: photoCaption.trim(), relatedDocId: docIdBytes(sealed.docId), docId: docIdBytes(docId) },
+      { budget: photoSrc.budget, passphrase: encryption.on ? encryption.passphrase : undefined },
+    );
+    setPhotoBusy(false);
+    if (!res.ok) return setPhotoError(`${res.error.code}: ${res.error.message}`);
+    setPhoto({ frame: res.value.frame, docId, rx: sealed.docId, encrypted: res.value.encrypted });
+  };
+
   // ---- pharmacy ------------------------------------------------------------
   const receive = (frame: Uint8Array, channel: Channel, phrase = passphrase) => {
+    setReveal([]);
     // Signature check first (TOFU); who may be dispensed is decided by redemptionGate below.
     const v = core.verify(frame, [], phrase || undefined);
     const dispensed = v.ok ? findRedemption(DISPENSED, v.value) : null;
@@ -143,7 +169,11 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
     }
     setReceived({ ...received, dispensed: out, refused: undefined, seq: n });
   };
-  const gate = received?.v.ok ? redemptionGate(received.v.value, { kind: "medicalPrescription", selfKeyHex: keyInfo.publicKeyHex }) : null;
+  // Photos are attachments: verified and shown, never "dispensed".
+  const receivedPhoto = received?.v.ok && "imageDocument" in received.v.value.document.body ? received.v.value.document.body.imageDocument : null;
+  // The relatedDocId is only a claim: it links to a prescription only if the issuer is trusted here.
+  const photoPinned = received?.v.ok && receivedPhoto ? issuerPinned(received.v.value, keyInfo.publicKeyHex) : false;
+  const gate = received?.v.ok && !receivedPhoto ? redemptionGate(received.v.value, { kind: "medicalPrescription", selfKeyHex: keyInfo.publicKeyHex }) : null;
   void pins;
 
   const locked = received && !received.v.ok && ["PASSPHRASE_REQUIRED", "DECRYPTION_FAILED"].includes(received.v.error.code);
@@ -289,13 +319,55 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
               </ul>
             )}
           </Panel>
+
+          <Panel title="Attach a clinical photo · GPKT v2" className="lg:col-span-2">
+            <p className="text-[12px] text-mist">
+              A rapid-test strip or a wound photo, re-encoded on this device, signed with the same key and linked to the prescription. Too big for a QR burst: it travels as ChromaCrypt color matrices (≈ 525 B per image, 15 per second) or as an
+              OFDM chord.
+            </p>
+            {sealed ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="flex flex-col gap-3">
+                  <ImageAttach onChange={(source, budget) => setPhotoSrc(source ? { source, budget } : null)} disabled={photoBusy} />
+                  <TextField label="Caption" value={photoCaption} onChange={setPhotoCaption} max={NOTE} />
+                  <button type="button" onClick={() => void sealPhoto()} disabled={!photoSrc || photoBusy || encryptionBlocked(encryption)} className="btn-accent self-start px-5 py-2 text-sm">
+                    {photoBusy ? "Signing…" : `Sign the photo for ${sealed.docId}`}
+                  </button>
+                  {photoError && <p className="font-mono text-xs text-alarm">{photoError}</p>}
+                </div>
+                <div className="flex flex-col gap-3">
+                  {photo ? (
+                    <>
+                      <p className="font-mono text-xs text-ink">
+                        {photo.docId} → {photo.rx} · {(photo.frame.length / 1024).toFixed(1)} KB GPKT v2{photo.encrypted ? " · E2EE" : ""}
+                      </p>
+                      <VirtualHandover
+                        ghost={ghost}
+                        frame={photo.frame}
+                        transport="chroma"
+                        onPartial={setReveal}
+                        onFrame={(f, c) => receive(f, c, encryption.on ? encryption.passphrase : passphrase)}
+                        label="Hand over the photo (virtual ChromaCrypt, 30 % loss)"
+                      />
+                      <AirSender ghost={ghost} frame={photo.frame} mode={mode} caption={`GhostClinic ${photo.docId}`} />
+                    </>
+                  ) : (
+                    <p className="font-mono text-xs text-mute">Choose a photo (or the sample), then sign it.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="font-mono text-xs text-mute">Sign a prescription first: the photo is linked to it.</p>
+            )}
+          </Panel>
         </div>
       )}
 
       {tab === "pharmacy" && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Receive a prescription" aside={<ModeSelect mode={mode} onChange={setMode} />}>
-            <AirReceiver ghost={ghost} mode={mode} onFrame={(f, c) => receive(f, c)} />
+          <Panel title="Receive a prescription or a photo" aside={<ModeSelect mode={mode} onChange={setMode} />}>
+            <AirReceiver ghost={ghost} mode={mode} onFrame={(f, c) => receive(f, c)} onPartial={setReveal} />
+            {reveal.length > 0 && !reveal.every(Boolean) && <SpectralImageReveal decoded={reveal} label="A large frame is arriving: each block burns through the fog" />}
             <TextField label="Passphrase for encrypted prescriptions (optional)" value={passphrase} onChange={setPassphrase} mono />
             {locked && received && (
               <button type="button" onClick={() => receive(received.frame, received.channel)} disabled={!passphrase} className="rounded-lg bg-ion/90 px-3 py-2 text-sm font-semibold text-void disabled:opacity-40">
@@ -309,6 +381,17 @@ export default function ClinicApp({ ghost }: { ghost: GhostState }) {
               <IssuerGate gate={gate} verified={received.v.value} label={"medicalPrescription" in received.v.value.document.body ? received.v.value.document.body.medicalPrescription.clinic : "Issuer"} onPinned={() => setPins((p) => p + 1)} />
             )}
             {received?.refused && <p className="rounded-lg bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
+            {receivedPhoto &&
+              (photoPinned ? (
+                <p className="rounded-lg bg-phosphor/10 p-2 text-[12px] text-phosphor">
+                  Signed attachment for {String.fromCharCode(...receivedPhoto.relatedDocId).trim() || "a prescription"}: shown after Ed25519 verification, nothing to dispense.
+                </p>
+              ) : (
+                <p className="rounded-lg bg-ink/[0.045] p-2 text-[12px] text-mist">
+                  Unlinked attachment: the signature is valid, but issuer {received?.v.ok ? received.v.value.fingerprint : ""} is not pinned on this device, so its claim to belong to{" "}
+                  {String.fromCharCode(...receivedPhoto.relatedDocId).trim() || "a prescription"} is not trusted. Pin the clinic&apos;s key first.
+                </p>
+              ))}
             {received?.v.ok && gate?.ok && (
               <button
                 type="button"

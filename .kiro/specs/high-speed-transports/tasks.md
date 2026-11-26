@@ -1,0 +1,29 @@
+# Implementation plan — High-speed transports
+
+- [x] 1. GPKT v2
+  - [x] 1.1 `Layout` per version, `encode_frame_v2_with`, shared verification order, v2 bounds before allocation
+  - [x] 1.2 `ImageDocument` (0x05), byte-string serde with a decode cap, magic bytes and dimensions, image SHA-256
+  - [x] 1.3 Tests `tests/gpkt_v2.rs` (round trip, encryption, tamper → CRC then signature, bounds, hostile u32 length)
+  - _Requirements: 1.1–1.5_
+- [x] 2. Wide fountain + ChromaCrypt
+  - [x] 2.1 `fountain_wide.rs` (K ≤ 512), overhead test over 40 sessions at 30 % loss
+  - [x] 2.2 `chroma.rs` encoder / decoder (finders, homography, calibration, RS); tests: clean, tint + noise + offset, keystone, refusals
+  - [x] 2.3 SDK `chroma-engine.ts`, UI modes in `AirSender` / `AirReceiver` / `VirtualHandover`
+  - _Requirements: 2.*_
+- [x] 3. Acoustic OFDM
+  - [x] 3.1 `ofdm.rs` modem; `tests/noise_ofdm_fuzz.rs` (noise, echo, ±300 ppm, quiet, clipping)
+  - [x] 3.2 `AcousticMode` in the audio engine (play, loopback, microphone), sound effects muted by the modem counter
+  - _Requirements: 3.*_
+- [x] 4. Persistent issuer identity
+  - [x] 4.1 `vault.rs` (+ `seal_with` / `open_with`), tests
+  - [x] 4.2 `identity.ts`, `GhostProvider persistent`, `IdentityGate`; GhostClinic and GhostTontine use it
+  - _Requirements: 4.*_
+- [x] 5. Apps and tooling
+  - [x] 5.1 Clinic photo linked to the prescription; portal `HighSpeedLab` (Simulation, Test)
+  - [x] 5.2 Verifier accepts v2 frames, summarizes images; MCP inspector and benchmark V3
+  - [x] 5.3 E2E: `scripts/e2e/apps.mjs` (vault, ChromaCrypt photo, OFDM image), `scripts/e2e/portal.mjs` versioned
+  - _Requirements: all_
+- [ ] 6. Later
+  - [ ] 6.1 Ultrasonic pairing (needs field measurements of the 17–20 kHz band)
+  - [ ] 6.2 WebRTC LAN for multi-MB transfers (product rule 3 decision)
+  - [ ] 6.3 Chimera Turbo: wide droplets over OFDM, one decoder for both channels

@@ -1,13 +1,28 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const __wbg_chromarx_free: (a: number, b: number) => void;
+export const __wbg_chromatx_free: (a: number, b: number) => void;
 export const __wbg_fountainrx_free: (a: number, b: number) => void;
 export const __wbg_fountaintx_free: (a: number, b: number) => void;
 export const __wbg_spectrum_free: (a: number, b: number) => void;
+export const chroma_palette: () => [number, number];
+export const chromarx_decodedMap: (a: number) => [number, number];
+export const chromarx_frame: (a: number) => [number, number, number, number];
+export const chromarx_ingest: (a: number, b: number, c: number) => [number, number, number];
+export const chromarx_new: () => number;
+export const chromarx_partial: (a: number) => [number, number];
+export const chromarx_reset: (a: number) => void;
+export const chromarx_scan: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const chromatx_cells: (a: number, b: number) => [number, number, number, number];
+export const chromatx_droplet: (a: number, b: number) => [number, number];
+export const chromatx_k: (a: number) => number;
+export const chromatx_new: (a: number, b: number, c: number) => [number, number, number];
 export const core_version: () => [number, number];
 export const crc32: (a: number, b: number) => number;
 export const decode_frame: (a: number, b: number, c: any, d: number, e: number) => [number, number, number];
 export const encode_document: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+export const encode_document_v2: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const fingerprint_of: (a: number, b: number) => [number, number, number, number];
 export const flip_bit: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const fountainrx_frame: (a: number) => [number, number, number, number];
@@ -28,8 +43,14 @@ export const inspect_frame: (a: number, b: number, c: number, d: number) => [num
 export const is_dropped: (a: number, b: number, c: number) => number;
 export const key_info: (a: number, b: number) => [number, number, number];
 export const limits: () => [number, number, number];
+export const ofdm_burst_seconds: (a: number, b: number) => number;
+export const ofdm_demodulate: (a: number, b: number, c: number) => [number, number, number];
+export const ofdm_modulate: (a: number, b: number, c: number) => [number, number, number, number];
 export const spectrum_compute: (a: number, b: number, c: number) => [number, number];
 export const spectrum_new: (a: number) => [number, number, number];
+export const vault_identity: (a: number, b: number) => [number, number, number];
+export const vault_open: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const vault_seal: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;

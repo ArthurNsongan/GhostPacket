@@ -66,11 +66,26 @@ Every sound is off by default and silenced instantly while the real modem plays 
 
 ```powershell
 npm run build:pages -- --base /GhostPacket   # portal + /clinic + /tontine merged into pages-out/
-node scripts/e2e-apps.mjs                    # 22 headless Chrome checks of both apps
+node scripts/e2e/apps.mjs                    # 28 headless Chrome checks of both apps and the V3 transports
+node scripts/e2e/portal.mjs                  # 30 checks of the portal (fake microphone and camera)
 npm run dev:clinic                           # or dev:portal, dev:tontine
 ```
 
-Open decisions: a persistent issuer key (today a pin lasts one issuer session) and a dedicated origin. See `.kiro/specs/v3-skeleton-crew/design.md` → *Known limits*. The high-speed transports of `UPGRADE_PLAN_V3.md` (GPKT v2, ChromaCrypt, OFDM, ultrasonic, WebRTC) are the next phase.
+### High-speed transports and photos (spec `.kiro/specs/high-speed-transports/`)
+
+| Channel | Frames | Measured |
+|---|---|---|
+| 4-FSK robust / fast (sound) | ≤ 512 B | 133 / 333 bit/s |
+| **OFDM chord** (sound: 32 DQPSK subcarriers, 1.5–7.4 kHz, RS 255/223) | ≤ 16 KB | 4.0–4.2 kbit/s: a 12 KB photo in 24 s at 15 dB SNR; survives ±300 ppm clock drift over 33 s, room echo, a receiver 30 dB quieter, clipping |
+| Fountain QR (light) | ≤ 512 B | a 300-byte frame in about 4 s at 30 % loss |
+| **ChromaCrypt** (light: 44×44 cells, 8 calibrated colors, 525 B per matrix, wide fountain) | ≤ 128 KB | a 12 KB photo in ≈ 2.8 s at 15 FPS with 30 % of matrices lost (≈ 36 kbit/s); 0.8 ms per scan |
+
+- **GPKT v2** frames keep the v1 layout with a u32 length. `ImageDocument` carries a WebP or JPEG re-encoded on the device to Micro 4 KB, Standard 15 KB or High 48 KB, inside the signed document.
+- GhostClinic attaches a rapid-test photo to a prescription (`IMG-xxxx → RX-xxxxx`). The pharmacy sees it only after verification; the image tiles burn through a spectral fog as fountain blocks arrive.
+- The portal's Simulation and Test pages have a **high-speed lab**: an image over ChromaCrypt with a loss slider or over OFDM with a noise slider, virtual or between two devices.
+- **Persistent issuer identity:** GhostClinic and GhostTontine seal their signing key in a 101-byte vault (Rust: PBKDF2-HMAC-SHA256 210k + ChaCha20-Poly1305, public key authenticated). A pharmacy's pin now survives reloads. "Continue with a session key" keeps the one-click demo.
+
+Not in this iteration: ultrasonic pairing and the WebRTC LAN transport (see the spec's design.md). Open decision: a dedicated origin instead of the shared `github.io` one (`.kiro/specs/v3-skeleton-crew/design.md` → *Known limits*).
 
 ## Judge demo (under 30 s, 1 click, no hardware)
 
@@ -97,15 +112,15 @@ QR codes in the loopback are actually rendered on a canvas and read back with `j
 | Verify | ~0.5 ms |
 | Encrypted encode / decrypt + verify | ~89 / ~90 ms in WASM (PBKDF2 40 000 iterations) |
 | Largest encrypted custom message | 511 bytes |
-| WASM | ~252 KB gzip (budget 350 KB) |
+| WASM | ~280 KB gzip (budget 350 KB) |
 | Acoustic burst, fast / robust | 8.1 s / 20.3 s for 296 bytes |
 | FSK decoding | 100 % at 6 to 20 dB SNR (fuzz suite) |
 | Clock drift and room echo | 100 % from −300 to +300 ppm with two reflections, at 12 dB SNR (symbol timing tracking) |
 | Field mode in Chrome (fake mic, fake camera) | microphone: verified after 26.3 s (350-byte frame, robust mode, 23.6 s burst); camera: 20/20 blocks from blurred QR codes in 3.6 s |
 | Fountain decoding | 100 % of 100 seeds at 30, 40 and 50 % loss, ~1.23 K droplets received on average |
-| Rust tests | 52 in the core (protocol vectors incl. encryption and weak keys, FSK fuzz, fountain fuzz, unit) + 12 in the server verifier (real TCP) |
+| Rust tests | 82 in the core (protocol v1/v2 vectors incl. encryption, weak keys and hostile lengths, FSK and OFDM channel fuzz, fountain fuzz, wide fountain, ChromaCrypt, vault) + 13 in the server verifier (real TCP) |
 | SDK package tests | 12 in Node (incl. sync against the real verifier and the redemption policy) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
-| V3 apps (headless Chrome, `scripts/e2e-apps.mjs`) | 22/22: clinic ward → sign → virtual hand-over → dispense once → refuse twice; tontine receipt → wallet, voucher → pay out once → refuse twice; per-app storage isolation, Clean Field Mode, per-app worker scope, 0 error / external request / 404 |
+| V3 apps (headless Chrome, `scripts/e2e/apps.mjs`) | 28/28: issuer vault created, wrong passphrase refused, same fingerprint after reload; ChromaCrypt photo at 30 % loss verified and shown; image over OFDM at 15 dB; clinic ward → sign → virtual hand-over → dispense once → refuse twice; tontine receipt → wallet, voucher → pay out once → refuse twice; per-app storage isolation, Clean Field Mode, per-app worker scope, 0 error / external request / 404 |
 | SDK redemption policy (Node) | unpinned issuer, DEMO frame, expired voucher and future timestamp refused; guarded ledger cannot be cleared and fails closed on a storage error; namespaces isolate apps |
 | Portal browser checks (headless Chrome, `/GhostPacket/` base path) | 30/30: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, outbox → verifier sync, offline reload, 0 console error, 0 external request, 0 404 |
 

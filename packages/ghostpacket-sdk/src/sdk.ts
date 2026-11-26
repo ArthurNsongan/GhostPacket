@@ -7,13 +7,15 @@
 //   if (sealed.ok) await gp.transmitAcoustic(sealed.value.frame);
 //   // Receiver: gp.verifyFrame(frame) → gp.queueProof(frame, v) → gp.syncProofs("https://verifier…")
 import { MicReceiver, playBurst, type AcousticTick } from "./audio-engine";
+import { chromaBroadcast, ChromaScanner } from "./chroma-engine";
+import { encodeImage, type ImageBudget } from "./image-codec";
 import { readKeyring } from "./keyring";
 import { redeem, type LedgerCheck, type LedgerScope } from "./ledger";
 import { messageDraft, type MessageInput } from "./messages";
 import { broadcast, CameraScanner } from "./optical-engine";
 import { autoSync, ProofOutbox, type OutboxItem, type SyncOptions, type SyncReport } from "./outbox";
 import { setStorage, type KeyValueStore } from "./storage";
-import { FLAG_FOUNTAIN, FLAG_FSK, type Channel, type DocumentDraft, type EncodedFrame, type FskMode, type KeyInfo, type VerifiedFrame } from "./types";
+import { FLAG_FOUNTAIN, FLAG_FSK, type Channel, type DocumentDraft, type AcousticMode, type EncodedFrame, type KeyInfo, type VerifiedFrame } from "./types";
 import { configureAssets, type AssetConfig } from "./assets";
 import { loadCore, newSigningSeed, type Core, type Result } from "./wasm-bridge";
 
@@ -78,6 +80,77 @@ export class GhostPacketSDK {
     return new GhostPacketSDK(core, seed);
   }
 
+  /**
+   * Signs a document carrying an image into a GPKT v2 frame (≤ 128 KB payload).
+   * The image is re-encoded by the browser to fit `budget` (default Standard · 15 KB, which also fits one OFDM burst).
+   */
+  async sealImage(
+    source: ImageBitmap | HTMLCanvasElement,
+    meta: { title: string; subjectRef?: string; caption?: string; relatedDocId?: number[]; docId?: number[] },
+    opts: SealOptions & { budget?: ImageBudget } = {},
+  ): Promise<Result<EncodedFrame>> {
+    let img;
+    try {
+      img = await encodeImage(source, opts.budget ?? "standard");
+    } catch (e) {
+      return { ok: false, error: { code: "IMAGE_TOO_LARGE", message: e instanceof Error ? e.message : String(e) } };
+    }
+    const draft: DocumentDraft = {
+      docId: meta.docId ?? messageDraft({ sender: "", title: "", message: "" }).docId,
+      timestamp: Math.floor(Date.now() / 1000),
+      body: {
+        imageDocument: {
+          title: meta.title,
+          subjectRef: meta.subjectRef ?? "",
+          caption: meta.caption ?? "",
+          relatedDocId: meta.relatedDocId ?? [0, 0, 0, 0, 0, 0, 0, 0],
+          mime: img.mime,
+          width: img.width,
+          height: img.height,
+          image: img.bytes,
+        },
+      },
+    };
+    return this.core.encodeV2(draft, this.seed, opts.flags ?? FLAG_FOUNTAIN, opts.passphrase);
+  }
+
+  /** Loops ChromaCrypt color matrices (any frame, up to 128 KB) on `canvas` until `signal` aborts. */
+  transmitChroma(frame: Uint8Array, canvas: HTMLCanvasElement, signal: AbortSignal, fps = 12) {
+    return chromaBroadcast(this.core, frame, canvas, fps, signal);
+  }
+
+  /**
+   * Reads ChromaCrypt matrices from the rear camera; `onFrame` gets each rebuilt frame once.
+   * `withPartial` hands `onProgress` the bytes known so far (a copy per droplet, for image reveal).
+   */
+  async receiveChroma(
+    video: HTMLVideoElement,
+    onFrame: (frame: Uint8Array) => void,
+    onProgress?: (resolved: number, total: number, partial: Uint8Array | null) => void,
+    withPartial = false,
+  ): Promise<ChromaScanner> {
+    const rx = this.core.chromaRx();
+    let last = "";
+    const scanner = new ChromaScanner(video, rx, (scan, partial) => {
+      const step = scan.step;
+      if (!step) return;
+      onProgress?.(step.resolvedCount, step.totalK, partial);
+      if (step.complete) {
+        const f = rx.frame();
+        if (f.ok) {
+          const key = Array.from(f.value.subarray(-8)).join(",");
+          if (key !== last) {
+            last = key;
+            onFrame(f.value);
+          }
+        }
+        rx.reset();
+      }
+    }, 960, withPartial);
+    await scanner.start();
+    return scanner;
+  }
+
   /** Signs a free-form message or a full document draft into a GPKT frame (≤ 512 B). */
   sealMessage(input: MessageInput | DocumentDraft, opts: SealOptions = {}): Result<EncodedFrame> {
     const draft = "body" in input ? input : messageDraft(input);
@@ -93,13 +166,16 @@ export class GhostPacketSDK {
     return { ok: true, value: { ...v.value, replay } };
   }
 
-  /** Plays the frame on the speaker. Robust mode (15 ms/symbol) is meant for the air. */
-  transmitAcoustic(frame: Uint8Array, opts: { mode?: FskMode; volume?: number; signal?: AbortSignal; onTick?: (t: AcousticTick) => void } = {}) {
+  /**
+   * Plays the frame on the speaker. 4-FSK robust (15 ms/symbol) is meant for the air
+   * and frames ≤ 512 B; "ofdm" carries frames up to 16 KB at ≈ 4 kbit/s.
+   */
+  transmitAcoustic(frame: Uint8Array, opts: { mode?: AcousticMode; volume?: number; signal?: AbortSignal; onTick?: (t: AcousticTick) => void } = {}) {
     return playBurst(this.core, frame, opts.mode ?? "robust", opts);
   }
 
   /** Listens on the microphone until frames arrive; call `stop()` on the result. */
-  async receiveAcoustic(opts: { mode?: FskMode; onFrame: (frame: Uint8Array) => void; onTick?: (t: AcousticTick) => void; onStatus?: (s: string) => void }): Promise<MicReceiver> {
+  async receiveAcoustic(opts: { mode?: AcousticMode; onFrame: (frame: Uint8Array) => void; onTick?: (t: AcousticTick) => void; onStatus?: (s: string) => void }): Promise<MicReceiver> {
     const rx = new MicReceiver(this.core, opts.mode ?? "robust", {
       onFrame: (f) => opts.onFrame(f),
       onTick: opts.onTick,

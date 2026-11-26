@@ -1,14 +1,14 @@
 // Static facts shown in the Kiro Telemetry drawer and on the home page.
 // Update `rustTests` and `wasmGzipKb` when a crate changes
-// (`cargo test --release` on ghostpacket-core (52) and ghostpacket-verifier (12),
+// (`cargo test --release` on ghostpacket-core (82) and ghostpacket-verifier (13),
 // and the `copy-wasm` line of `npm run wasm`).
 export const BUILD_INFO = {
   coreVersion: "0.2.0",
   skeleton: ["crates/ghostpacket-core", "packages/ghostpacket-sdk", "packages/ghostpacket-ui"],
-  rustTests: 64,
-  wasmGzipKb: 252,
+  rustTests: 95,
+  wasmGzipKb: 280,
   steering: ["product", "tech", "structure", "wasm-determinism", "ui-design-system"],
-  specs: ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2", "sdk-and-sync", "v3-skeleton-crew"],
+  specs: ["core-system", "binary-protocol", "acoustic-fsk", "optical-fountain", "judge-demo-ui", "platform-v2", "sdk-and-sync", "v3-skeleton-crew", "high-speed-transports"],
   hooks: ["fuzz-noise-channel", "wasm-no-panic-guard", "ts-typecheck-on-save", "kiroween-audit"],
   agents: ["dsp-security-auditor"],
   mcpTools: ["inspect_frame_hex", "run_channel_benchmark", "check_kiroween_compliance"],

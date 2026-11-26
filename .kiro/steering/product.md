@@ -8,9 +8,10 @@ inclusion: always
 In low-coverage areas (markets, rural clinics, savings groups, disaster zones), two nearby devices need to exchange a short document and **prove it is authentic** with no Internet, no server and no Bluetooth pairing.
 
 ## Solution
-GhostPacket turns a structured document into an **Ed25519-signed binary frame of at most 512 bytes**, then sends it over one of two one-way physical channels:
+GhostPacket turns a structured document into an **Ed25519-signed binary frame** (GPKT v1, at most 512 bytes; GPKT v2 up to 128 KB for a document with a photo), then sends it over one of two one-way physical channels:
 - **Channel A (sound)**: continuous-phase 4-FSK modem, speaker → microphone.
 - **Channel B (light)**: Luby Transform fountain codes shown as a burst of QR codes, screen → camera.
+- **V3 high-speed modes** for larger frames: an OFDM chord over sound (≈ 4 kbit/s, ≤ 16 KB) and ChromaCrypt color matrices over light (≈ 36 kbit/s at 15 FPS, ≤ 128 KB).
 
 The receiver rebuilds the frame, checks CRC32 then Ed25519, and shows either the document or an **explicit rejection**.
 

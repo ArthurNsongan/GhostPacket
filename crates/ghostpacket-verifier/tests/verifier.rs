@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use ghostpacket_core::channel_sim::flip_bit;
 use ghostpacket_core::crypto::Keypair;
-use ghostpacket_core::protocol::{encode_frame, encode_frame_with, Encryption};
+use ghostpacket_core::protocol::{encode_frame, encode_frame_v2_with, encode_frame_with, Encryption};
 use ghostpacket_core::schema::{DocumentBody, DocumentDraft};
 use ghostpacket_verifier::{http, Config, Verifier};
 use zeroize::Zeroizing;
@@ -111,7 +111,7 @@ fn rejects_tampered_oversized_and_malformed_requests() {
     let (s, _, b) = post(&addr, &bad);
     assert_eq!((s, b["code"].as_str()), (422, Some("CRC32_MISMATCH")));
 
-    assert_eq!(request(&addr, "POST", "/v1/proofs", "", &[0u8; 16], Some(100_000)).0, 413, "length checked before reading");
+    assert_eq!(request(&addr, "POST", "/v1/proofs", "", &[0u8; 16], Some(200_000)).0, 413, "length checked before reading (v2 bound: 131 150 B)");
     assert_eq!(request(&addr, "POST", "/v1/proofs", "", &f, None).0, 411);
     assert_eq!(request(&addr, "POST", "/v1/proofs", "Content-Length: 12\r\n", &f, Some(f.len())).0, 400, "duplicate Content-Length");
     assert_eq!(request(&addr, "POST", "/v1/proofs", "Transfer-Encoding: chunked\r\n", &f, Some(f.len())).0, 400);
@@ -243,4 +243,38 @@ fn cors_preflight_and_unknown_routes() {
     assert!(h.contains("Access-Control-Allow-Private-Network: true"));
     assert_eq!(request(&addr, "GET", "/v1/proofs", "", b"", None).0, 405);
     assert_eq!(request(&addr, "GET", "/nope", "", b"", None).0, 404);
+}
+
+#[test]
+fn image_proofs_in_v2_frames_are_verified_and_summarized() {
+    let mut image = Vec::with_capacity(20_000);
+    image.extend_from_slice(b"RIFF");
+    image.extend_from_slice(&(19_992u32).to_le_bytes());
+    image.extend_from_slice(b"WEBPVP8 ");
+    image.extend((0..(20_000 - 16)).map(|i| (i * 31 % 251) as u8));
+    let draft = DocumentDraft {
+        doc_id: *b"IMG-0815",
+        timestamp: 1_793_448_000,
+        body: DocumentBody::ImageDocument {
+            title: "Malaria RDT".into(),
+            subject_ref: "PAT-0815".into(),
+            caption: "two lines".into(),
+            related_doc_id: *b"RX-77310",
+            mime: 1,
+            width: 640,
+            height: 360,
+            image,
+        },
+    };
+    let frame = encode_frame_v2_with(draft, &SEED, 0, None).unwrap().bytes;
+    assert!(frame.len() > 512);
+    let addr = start(config());
+    let (s, _, b) = post(&addr, &frame);
+    assert_eq!(s, 201, "{b}");
+    let doc = &b["document"]["imageDocument"];
+    assert_eq!(doc["imageBytes"], 20_000);
+    assert_eq!(doc["imageSha256"].as_str().map(str::len), Some(64));
+    assert_eq!(doc["relatedDocId"], "RX-77310");
+    assert!(doc.get("image").is_none(), "raw image bytes are never echoed");
+    assert_eq!(post(&addr, &frame).0, 409);
 }

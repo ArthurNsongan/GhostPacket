@@ -1,7 +1,7 @@
 "use client";
 
 import type { Result } from "ghostpacket-sdk/wasm-bridge";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { bloodMoon, spectral } from "ghostpacket-sdk/effects";
 import type { LedgerCheck } from "ghostpacket-sdk/ledger";
@@ -29,6 +29,22 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 export { docTitle };
+
+const MIME_TYPES = ["", "image/webp", "image/jpeg", "image/png"];
+
+/** Image from a verified document: a local blob URL, revoked on unmount. */
+export function SignedImage({ image, mime, alt }: { image: Uint8Array; mime: number; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const type = MIME_TYPES[mime];
+    if (!type) return;
+    const u = URL.createObjectURL(new Blob([image.slice().buffer], { type }));
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [image, mime]);
+  // eslint-disable-next-line @next/next/no-img-element
+  return url ? <img src={url} alt={alt} className="reveal max-h-80 w-auto rounded-md" /> : null;
+}
 
 /** Human view of a document body. */
 export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; docId: number[]; timestamp: number }) {
@@ -71,6 +87,27 @@ export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; d
         <>
           <Row k="From" v={body.customMessage.sender || "—"} />
           <Row k="Title" v={body.customMessage.title || "—"} />
+        </>
+      )}
+      {"imageDocument" in body && (
+        <>
+          <Row k="Title" v={body.imageDocument.title} />
+          <Row k="Subject" v={body.imageDocument.subjectRef} />
+          {body.imageDocument.relatedDocId.some((b) => b !== 0) && (
+            <Row k="Linked to" v={<span className="font-mono">{String.fromCharCode(...body.imageDocument.relatedDocId).trim()}</span>} />
+          )}
+          <Row k="Caption" v={body.imageDocument.caption || "—"} />
+          <Row
+            k="Image"
+            v={
+              <span className="font-mono text-[11px] text-mist">
+                {body.imageDocument.width}×{body.imageDocument.height} · {(body.imageDocument.image.length / 1024).toFixed(1)} KB · {["", "WebP", "JPEG", "PNG"][body.imageDocument.mime] ?? "?"}
+              </span>
+            }
+          />
+          <div className="mt-2">
+            <SignedImage image={body.imageDocument.image} mime={body.imageDocument.mime} alt={body.imageDocument.title} />
+          </div>
         </>
       )}
       {"emergencyVoucher" in body && (

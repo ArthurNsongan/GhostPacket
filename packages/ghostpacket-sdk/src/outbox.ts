@@ -50,6 +50,10 @@ export interface SyncOptions {
 const KEY = "ghostpacket.outbox.v1";
 const ENDPOINT_KEY = "ghostpacket.sync.endpoint";
 export const MAX_OUTBOX = 200;
+/** Largest frame accepted in the outbox (a GPKT v2 frame with an image). */
+export const MAX_OUTBOX_FRAME = 131_150;
+/** Base64 budget of the whole outbox, well under the ~5 MB localStorage quota. */
+export const MAX_OUTBOX_BYTES = 2_000_000;
 const listeners = new Set<() => void>();
 
 function b64(bytes: Uint8Array): string {
@@ -138,6 +142,7 @@ export class ProofOutbox {
    * Returns null when the outbox holds MAX_OUTBOX pending items (sync first).
    */
   enqueue(frame: Uint8Array, v: VerifiedFrame, channel: Channel): OutboxItem | null {
+    if (frame.length === 0 || frame.length > MAX_OUTBOX_FRAME) return null;
     const docId = docIdText(v.document.docId);
     const id = `${v.fingerprint}/${docId}/${v.document.timestamp}`;
     const items = this.list();
@@ -157,7 +162,8 @@ export class ProofOutbox {
     };
     // Oldest settled items make room (rejected, then replays, then synced); pending ones are never dropped.
     const next = [item, ...items];
-    while (next.length > MAX_OUTBOX) {
+    const bytes = () => next.reduce((n, i) => n + i.frameB64.length, 0);
+    while (next.length > MAX_OUTBOX || bytes() > MAX_OUTBOX_BYTES) {
       const states = next.map((i) => i.state);
       const idx = EVICTABLE.map((s) => states.lastIndexOf(s)).find((i) => i >= 0);
       if (idx === undefined) return null;

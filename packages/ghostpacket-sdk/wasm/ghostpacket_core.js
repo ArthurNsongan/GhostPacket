@@ -1,6 +1,160 @@
 /* @ts-self-types="./ghostpacket_core.d.ts" */
 
 /**
+ * Receiver: camera image → matrix → droplet → wide fountain.
+ */
+export class ChromaRx {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ChromaRxFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_chromarx_free(ptr, 0);
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    decodedMap() {
+        const ret = wasm.chromarx_decodedMap(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    frame() {
+        const ret = wasm.chromarx_frame(this.__wbg_ptr);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * Feeds a droplet directly (virtual loopback without pixels).
+     * @param {Uint8Array | number[]} droplet
+     * @returns {any}
+     */
+    ingest(droplet) {
+        const ptr0 = passArray8ToWasm0(droplet, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.chromarx_ingest(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    constructor() {
+        const ret = wasm.chromarx_new();
+        this.__wbg_ptr = ret;
+        ChromaRxFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * Bytes known so far (unknown blocks zero), for progressive image reveal only.
+     * @returns {Uint8Array}
+     */
+    partial() {
+        const ret = wasm.chromarx_partial(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    reset() {
+        wasm.chromarx_reset(this.__wbg_ptr);
+    }
+    /**
+     * Reads one RGBA camera image. Never throws on an unreadable image:
+     * `found` is false with an `errorCode` (CHROMA_NOT_FOUND, CHROMA_UNCORRECTABLE…).
+     * @param {Uint8Array | number[]} rgba
+     * @param {number} width
+     * @param {number} height
+     * @returns {any}
+     */
+    scan(rgba, width, height) {
+        const val2 = +width;
+        const val3 = +height;
+        const ptr0 = passArray8ToWasm0(rgba, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.chromarx_scan(this.__wbg_ptr, ptr0, len0, val2, val3);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+}
+if (Symbol.dispose) ChromaRx.prototype[Symbol.dispose] = ChromaRx.prototype.free;
+
+/**
+ * Emitter: splits a (v1 or v2) frame into wide-fountain droplets, one per matrix.
+ */
+export class ChromaTx {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ChromaTxFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_chromatx_free(ptr, 0);
+    }
+    /**
+     * `GRID × GRID` palette indices (0..8, bits r g b) of the matrix for droplet `seed`.
+     * @param {number} seed
+     * @returns {Uint8Array}
+     */
+    cells(seed) {
+        const ret = wasm.chromatx_cells(this.__wbg_ptr, seed);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @param {number} seed
+     * @returns {Uint8Array}
+     */
+    droplet(seed) {
+        const ret = wasm.chromatx_droplet(this.__wbg_ptr, seed);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {number}
+     */
+    k() {
+        const ret = wasm.chromatx_k(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {Uint8Array | number[]} frame
+     * @param {number} session
+     */
+    constructor(frame, session) {
+        const val2 = +session;
+        const ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.chromatx_new(ptr0, len0, val2);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0];
+        ChromaTxFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) ChromaTx.prototype[Symbol.dispose] = ChromaTx.prototype.free;
+
+/**
  * Fountain decoder (receiver side of the optical channel).
  */
 export class FountainRx {
@@ -171,6 +325,17 @@ export class Spectrum {
 if (Symbol.dispose) Spectrum.prototype[Symbol.dispose] = Spectrum.prototype.free;
 
 /**
+ * Palette index → [r, g, b] for the renderer.
+ * @returns {Uint8Array}
+ */
+export function chroma_palette() {
+    const ret = wasm.chroma_palette();
+    var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v1;
+}
+
+/**
  * Crate version, for the UI footer and the MCP inspector.
  * @returns {string}
  */
@@ -254,6 +419,38 @@ export function encode_document(draft, signing_seed, flags, passphrase, salt) {
         throw e;
     }
     const ret = wasm.encode_document(draft, ptr0, len0, val4, ptr1, len1, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Like `encode_document`, but builds a GPKT v2 frame (payload up to 128 KB).
+ * @param {any} draft
+ * @param {Uint8Array | number[]} signing_seed
+ * @param {number} flags
+ * @param {string | null} [passphrase]
+ * @param {Uint8Array | number[] | null} [salt]
+ * @returns {any}
+ */
+export function encode_document_v2(draft, signing_seed, flags, passphrase, salt) {
+    const val4 = +flags;
+    let ptr0, len0, ptr1, len1, ptr2, len2;
+    try {
+        ptr0 = passArray8ToWasm0(signing_seed, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+        ptr2 = isLikeNone(salt) ? 0 : passArray8ToWasm0(salt, wasm.__wbindgen_malloc);
+        len2 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.encode_document_v2(draft, ptr0, len0, val4, ptr1, len1, ptr2, len2);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -442,6 +639,123 @@ export function limits() {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {number} frame_len
+ * @param {number} sample_rate
+ * @returns {number}
+ */
+export function ofdm_burst_seconds(frame_len, sample_rate) {
+    const ret = wasm.ofdm_burst_seconds(frame_len, sample_rate);
+    return ret;
+}
+
+/**
+ * Finds and decodes one OFDM burst. Returns metadata plus `frame: Uint8Array`.
+ * @param {Float32Array | number[]} samples
+ * @param {number} sample_rate
+ * @returns {any}
+ */
+export function ofdm_demodulate(samples, sample_rate) {
+    const val2 = +sample_rate;
+    const ptr0 = passArrayF32ToWasm0(samples, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ofdm_demodulate(ptr0, len0, val2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * PCM burst (32-carrier DQPSK OFDM, ≈ 4 kbit/s) for a frame up to 16 KB.
+ * @param {Uint8Array | number[]} frame
+ * @param {number} sample_rate
+ * @returns {Float32Array}
+ */
+export function ofdm_modulate(frame, sample_rate) {
+    const val2 = +sample_rate;
+    const ptr0 = passArray8ToWasm0(frame, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ofdm_modulate(ptr0, len0, val2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v3;
+}
+
+/**
+ * Public key and fingerprint stored in a vault (shown on the unlock screen).
+ * @param {Uint8Array | number[]} vault_bytes
+ * @returns {any}
+ */
+export function vault_identity(vault_bytes) {
+    const ptr0 = passArray8ToWasm0(vault_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.vault_identity(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Opens a vault; `VAULT_INVALID` on a wrong passphrase or any altered byte.
+ * @param {Uint8Array | number[]} vault_bytes
+ * @param {string} passphrase
+ * @returns {Uint8Array}
+ */
+export function vault_open(vault_bytes, passphrase) {
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passArray8ToWasm0(vault_bytes, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.vault_open(ptr0, len0, ptr1, len1);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Seals a 32-byte signing seed under a passphrase (≥ 10 bytes) with a fresh 16-byte salt.
+ * @param {Uint8Array | number[]} seed
+ * @param {string} passphrase
+ * @param {Uint8Array | number[]} salt
+ * @returns {Uint8Array}
+ */
+export function vault_seal(seed, passphrase, salt) {
+    let ptr0, len0, ptr1, len1, ptr2, len2;
+    try {
+        ptr0 = passArray8ToWasm0(seed, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+        ptr2 = passArray8ToWasm0(salt, wasm.__wbindgen_malloc);
+        len2 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.vault_seal(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
 }
 function __wbg_get_imports() {
     const import0 = {
@@ -645,11 +959,16 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
+            // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
+            const ret = getArrayU8FromWasm0(arg0, arg1);
+            return ret;
+        },
+        __wbindgen_generic_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_generic_0000000000000003: function(arg0) {
+        __wbindgen_generic_0000000000000004: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -669,6 +988,12 @@ function __wbg_get_imports() {
     };
 }
 
+const ChromaRxFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_chromarx_free(ptr, 1));
+const ChromaTxFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_chromatx_free(ptr, 1));
 const FountainRxFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_fountainrx_free(ptr, 1));

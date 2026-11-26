@@ -21,7 +21,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ghostpacket_core::crypto;
-use ghostpacket_core::protocol::{decode_and_verify_frame_with, FLAG_ENCRYPTED, MAX_FRAME_SIZE};
+use ghostpacket_core::protocol::{decode_and_verify_frame_with, FLAG_ENCRYPTED, MAX_ANY_FRAME_SIZE};
 use ghostpacket_core::schema::DocumentBody;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -204,10 +204,10 @@ impl Verifier {
 
     /// Full GPKT verification, then the server-side anti-replay ledger.
     pub fn submit(&self, frame: &[u8]) -> Verdict {
-        if frame.len() > MAX_FRAME_SIZE {
+        if frame.len() > MAX_ANY_FRAME_SIZE {
             return Verdict::Rejected {
                 code: "FRAME_TOO_LARGE".into(),
-                message: format!("Frame too large: {} bytes (maximum 512)", frame.len()),
+                message: format!("Frame too large: {} bytes (maximum {MAX_ANY_FRAME_SIZE})", frame.len()),
             };
         }
         let encrypted = frame.get(5).is_some_and(|f| f & FLAG_ENCRYPTED != 0);
@@ -287,7 +287,7 @@ impl Verifier {
             issuer_pubkey_hex: v.issuer_pubkey_hex,
             trusted_issuer: v.trusted_issuer,
             doc_timestamp: v.document.timestamp,
-            document: serde_json::to_value(&v.document.body).ok(),
+            document: document_json(&v.document.body, v.image_sha256.as_deref()),
         });
         Verdict::Accepted { receipt, encrypted: v.encrypted, details }
     }
@@ -304,6 +304,27 @@ pub fn parse_key(hex: &str) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+/// Document as JSON. An image is summarized (size, SHA-256): the bytes stay in the
+/// signed frame, which the client keeps; echoing 64 KB back would only waste bandwidth.
+fn document_json(body: &DocumentBody, image_sha256: Option<&str>) -> Option<Value> {
+    match body {
+        DocumentBody::ImageDocument { title, subject_ref, caption, related_doc_id, mime, width, height, image } => Some(serde_json::json!({
+            "imageDocument": {
+                "title": title,
+                "subjectRef": subject_ref,
+                "caption": caption,
+                "relatedDocId": doc_id_text(related_doc_id),
+                "mime": mime,
+                "width": width,
+                "height": height,
+                "imageBytes": image.len(),
+                "imageSha256": image_sha256,
+            }
+        })),
+        other => serde_json::to_value(other).ok(),
+    }
+}
+
 /// Human summary of a document body, for CLI output.
 pub fn describe(body: &DocumentBody) -> String {
     match body {
@@ -311,5 +332,6 @@ pub fn describe(body: &DocumentBody) -> String {
         DocumentBody::MedicalPrescription { clinic, items, .. } => format!("prescription · {clinic} · {} item(s)", items.len()),
         DocumentBody::EmergencyVoucher { program, items, .. } => format!("aid voucher · {program} · {} item(s)", items.len()),
         DocumentBody::CustomMessage { sender, title, .. } => format!("message · {sender} · {title}"),
+        DocumentBody::ImageDocument { title, image, width, height, .. } => format!("image · {title} · {width}×{height} · {} B", image.len()),
     }
 }

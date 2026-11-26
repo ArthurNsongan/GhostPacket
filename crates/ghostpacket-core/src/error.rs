@@ -30,6 +30,8 @@ pub enum GhostError {
     InvalidSalt { len: usize },
     DecryptionFailed,
     InvalidSeed { len: usize },
+    PassphraseTooShort { len: usize, min: usize },
+    VaultInvalid,
     InvalidPublicKey,
     InvalidSignature,
     UntrustedIssuer,
@@ -48,6 +50,18 @@ pub enum GhostError {
     DropletSessionMismatch,
     FountainInvalidParams,
     FountainIncomplete,
+    // --- Images (GPKT v2) ----------------------------------------------------
+    ImageTooLarge { len: usize, max: usize },
+    ImageFormatInvalid,
+    ImageHashMismatch,
+    // --- ChromaCrypt color matrix ------------------------------------------
+    ChromaNotFound,
+    ChromaUncorrectable,
+    ChromaInvalidImage,
+    // --- Acoustic OFDM --------------------------------------------------------
+    OfdmNoPreamble,
+    OfdmIncomplete { sync_offset: usize },
+    OfdmInvalidLength { len: usize },
     // --- Generic ----------------------------------------------------------
     InvalidArgument { what: &'static str },
 }
@@ -76,6 +90,8 @@ impl GhostError {
             GhostError::InvalidSalt { .. } => "INVALID_SALT",
             GhostError::DecryptionFailed => "DECRYPTION_FAILED",
             GhostError::InvalidSeed { .. } => "INVALID_SEED",
+            GhostError::PassphraseTooShort { .. } => "PASSPHRASE_TOO_SHORT",
+            GhostError::VaultInvalid => "VAULT_INVALID",
             GhostError::InvalidPublicKey => "INVALID_PUBLIC_KEY",
             GhostError::InvalidSignature => "INVALID_SIGNATURE",
             GhostError::UntrustedIssuer => "UNTRUSTED_ISSUER",
@@ -91,6 +107,15 @@ impl GhostError {
             GhostError::DropletSessionMismatch => "DROPLET_SESSION_MISMATCH",
             GhostError::FountainInvalidParams => "FOUNTAIN_INVALID_PARAMS",
             GhostError::FountainIncomplete => "FOUNTAIN_INCOMPLETE",
+            GhostError::ImageTooLarge { .. } => "IMAGE_TOO_LARGE",
+            GhostError::ImageFormatInvalid => "IMAGE_FORMAT_INVALID",
+            GhostError::ImageHashMismatch => "IMAGE_HASH_MISMATCH",
+            GhostError::ChromaNotFound => "CHROMA_NOT_FOUND",
+            GhostError::ChromaUncorrectable => "CHROMA_UNCORRECTABLE",
+            GhostError::ChromaInvalidImage => "CHROMA_INVALID_IMAGE",
+            GhostError::OfdmNoPreamble => "OFDM_NO_PREAMBLE",
+            GhostError::OfdmIncomplete { .. } => "OFDM_INCOMPLETE",
+            GhostError::OfdmInvalidLength { .. } => "OFDM_INVALID_LENGTH",
             GhostError::InvalidArgument { .. } => "INVALID_ARGUMENT",
         }
     }
@@ -153,6 +178,13 @@ impl fmt::Display for GhostError {
             GhostError::InvalidSeed { len } => {
                 write!(f, "Invalid Ed25519 seed: {len} bytes (expected 32)")
             }
+            GhostError::PassphraseTooShort { len, min } => {
+                write!(f, "Passphrase too short: {len} bytes (minimum {min})")
+            }
+            GhostError::VaultInvalid => write!(
+                f,
+                "Identity vault unreadable: wrong passphrase or altered vault"
+            ),
             GhostError::InvalidPublicKey => write!(f, "Invalid Ed25519 public key"),
             GhostError::InvalidSignature => {
                 write!(f, "Invalid Ed25519 signature: document forged or altered")
@@ -185,6 +217,28 @@ impl fmt::Display for GhostError {
             }
             GhostError::FountainInvalidParams => write!(f, "Invalid fountain parameters"),
             GhostError::FountainIncomplete => write!(f, "Fountain reconstruction incomplete"),
+            GhostError::ImageTooLarge { len, max } => {
+                write!(f, "Image too large: {len} bytes (max {max})")
+            }
+            GhostError::ImageFormatInvalid => {
+                write!(f, "Image is not a WebP, JPEG or PNG file")
+            }
+            GhostError::ImageHashMismatch => {
+                write!(f, "Image bytes do not match their signed SHA-256")
+            }
+            GhostError::ChromaNotFound => write!(f, "No ChromaCrypt matrix found in the image"),
+            GhostError::ChromaUncorrectable => {
+                write!(f, "ChromaCrypt matrix unreadable: too many cell errors for Reed-Solomon")
+            }
+            GhostError::ChromaInvalidImage => write!(f, "Invalid camera image buffer"),
+            GhostError::OfdmNoPreamble => write!(f, "No OFDM preamble detected"),
+            GhostError::OfdmIncomplete { sync_offset } => write!(
+                f,
+                "OFDM preamble locked at sample {sync_offset}, reception in progress"
+            ),
+            GhostError::OfdmInvalidLength { len } => {
+                write!(f, "Invalid OFDM frame length: {len}")
+            }
             GhostError::InvalidArgument { what } => write!(f, "Invalid argument: {what}"),
         }
     }

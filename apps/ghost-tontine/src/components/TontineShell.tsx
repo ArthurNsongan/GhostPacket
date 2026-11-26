@@ -12,6 +12,7 @@ const PORTAL = BASE.replace(/\/tontine$/, "") || "";
 export default function TontineShell({ children }: { children: React.ReactNode }) {
   return (
     <AppFrame
+      persistentIdentity
       app="tontine"
       brand={["Ghost", "Tontine"]}
       homeLink={(c) => (

@@ -5,14 +5,18 @@
 //! objects `{ code, message }` with a stable `code`.
 
 pub mod channel_sim;
+pub mod chroma;
 pub mod crypto;
 pub mod encryption;
 pub mod error;
 pub mod fec;
 pub mod fountain;
+pub mod fountain_wide;
 pub mod fsk;
+pub mod ofdm;
 pub mod protocol;
 pub mod schema;
+pub mod vault;
 
 use js_sys::{Reflect, Uint8Array};
 use serde::Serialize;
@@ -63,6 +67,13 @@ struct Limits {
     salt_len: usize,
     pbkdf2_iterations: u32,
     max_passphrase_bytes: usize,
+    max_frame_size_v2: usize,
+    max_image_bytes: usize,
+    chroma_grid: usize,
+    chroma_capacity: usize,
+    ofdm_max_frame: usize,
+    vault_len: usize,
+    min_vault_passphrase_bytes: usize,
 }
 
 /// Crate version, for the UI footer and the MCP inspector.
@@ -89,6 +100,13 @@ pub fn limits() -> Result<JsValue, JsValue> {
         salt_len: encryption::SALT_LEN,
         pbkdf2_iterations: encryption::PBKDF2_ITERATIONS,
         max_passphrase_bytes: encryption::MAX_PASSPHRASE_BYTES,
+        max_frame_size_v2: protocol::MAX_FRAME_SIZE_V2,
+        max_image_bytes: schema::MAX_IMAGE_BYTES,
+        chroma_grid: chroma::GRID,
+        chroma_capacity: chroma::CHROMA_CAPACITY,
+        ofdm_max_frame: ofdm::OFDM_MAX_FRAME,
+        vault_len: vault::VAULT_LEN,
+        min_vault_passphrase_bytes: vault::MIN_VAULT_PASSPHRASE_BYTES,
     })
 }
 
@@ -327,4 +345,175 @@ impl FountainRx {
     pub fn reset(&mut self) {
         self.inner.reset();
     }
+}
+
+// --- V3: identity vault -----------------------------------------------------------
+
+/// Seals a 32-byte signing seed under a passphrase (≥ 10 bytes) with a fresh 16-byte salt.
+#[wasm_bindgen]
+pub fn vault_seal(seed: &[u8], passphrase: &str, salt: &[u8]) -> Result<Vec<u8>, JsValue> {
+    vault::seal_seed(seed, passphrase.as_bytes(), salt).map_err(js_err)
+}
+
+/// Opens a vault; `VAULT_INVALID` on a wrong passphrase or any altered byte.
+#[wasm_bindgen]
+pub fn vault_open(vault_bytes: &[u8], passphrase: &str) -> Result<Uint8Array, JsValue> {
+    // Copied straight into JS memory; the Rust copy is zeroized on drop.
+    vault::open_seed(vault_bytes, passphrase.as_bytes()).map(|s| Uint8Array::from(&s[..])).map_err(js_err)
+}
+
+/// Public key and fingerprint stored in a vault (shown on the unlock screen).
+#[wasm_bindgen]
+pub fn vault_identity(vault_bytes: &[u8]) -> Result<JsValue, JsValue> {
+    let pk = vault::vault_public_key(vault_bytes).map_err(js_err)?;
+    to_js(&KeyInfo {
+        public_key_hex: crypto::to_hex(&pk),
+        fingerprint: crypto::fingerprint(&pk),
+    })
+}
+
+// --- V3: GPKT v2 (documents with an image) -------------------------------------------
+
+/// Like `encode_document`, but builds a GPKT v2 frame (payload up to 128 KB).
+#[wasm_bindgen]
+pub fn encode_document_v2(
+    draft: JsValue,
+    signing_seed: &[u8],
+    flags: u8,
+    passphrase: Option<String>,
+    salt: Option<Vec<u8>>,
+) -> Result<JsValue, JsValue> {
+    let draft: DocumentDraft = serde_wasm_bindgen::from_value(draft)
+        .map_err(|_| js_err(GhostError::InvalidArgument { what: "document draft" }))?;
+    let encryption = match (&passphrase, &salt) {
+        (Some(p), Some(s)) => Some(protocol::Encryption { passphrase: p.as_bytes(), salt: s.as_slice() }),
+        (Some(_), None) => return Err(js_err(GhostError::InvalidSalt { len: 0 })),
+        (None, _) => None,
+    };
+    let encoded = protocol::encode_frame_v2_with(draft, signing_seed, flags, encryption).map_err(js_err)?;
+    let obj = to_js(&encoded)?;
+    with_bytes(obj, "frame", &encoded.bytes)
+}
+
+// --- V3: ChromaCrypt color matrix + wide fountain ------------------------------------
+
+/// Emitter: splits a (v1 or v2) frame into wide-fountain droplets, one per matrix.
+#[wasm_bindgen]
+pub struct ChromaTx {
+    inner: fountain_wide::WideEncoder,
+}
+
+#[wasm_bindgen]
+impl ChromaTx {
+    #[wasm_bindgen(constructor)]
+    pub fn new(frame: &[u8], session: u16) -> Result<ChromaTx, JsValue> {
+        let block = fountain_wide::block_size_for(chroma::CHROMA_CAPACITY);
+        Ok(ChromaTx { inner: fountain_wide::WideEncoder::new(frame, session, block).map_err(js_err)? })
+    }
+
+    pub fn k(&self) -> usize {
+        self.inner.k()
+    }
+
+    /// `GRID × GRID` palette indices (0..8, bits r g b) of the matrix for droplet `seed`.
+    pub fn cells(&self, seed: u32) -> Result<Vec<u8>, JsValue> {
+        chroma::encode(&self.inner.droplet(seed)).map_err(js_err)
+    }
+
+    pub fn droplet(&self, seed: u32) -> Vec<u8> {
+        self.inner.droplet(seed)
+    }
+}
+
+/// Receiver: camera image → matrix → droplet → wide fountain.
+#[wasm_bindgen]
+pub struct ChromaRx {
+    inner: fountain_wide::WideDecoder,
+}
+
+impl Default for ChromaRx {
+    fn default() -> Self {
+        ChromaRx::new()
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChromaScan {
+    found: bool,
+    error_code: Option<&'static str>,
+    corners: Vec<[f32; 2]>,
+    corrected_bytes: usize,
+    step: Option<fountain_wide::WideStep>,
+}
+
+#[wasm_bindgen]
+impl ChromaRx {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> ChromaRx {
+        ChromaRx { inner: fountain_wide::WideDecoder::new() }
+    }
+
+    /// Reads one RGBA camera image. Never throws on an unreadable image:
+    /// `found` is false with an `errorCode` (CHROMA_NOT_FOUND, CHROMA_UNCORRECTABLE…).
+    pub fn scan(&mut self, rgba: &[u8], width: usize, height: usize) -> Result<JsValue, JsValue> {
+        let scan = match chroma::decode(rgba, width, height) {
+            Err(e) => ChromaScan { found: false, error_code: Some(e.code()), corners: Vec::new(), corrected_bytes: 0, step: None },
+            Ok(d) => match self.inner.ingest(&d.packet) {
+                Ok(step) => ChromaScan { found: true, error_code: None, corners: d.corners, corrected_bytes: d.corrected_bytes, step: Some(step) },
+                Err(e) => ChromaScan { found: true, error_code: Some(e.code()), corners: d.corners, corrected_bytes: d.corrected_bytes, step: None },
+            },
+        };
+        to_js(&scan)
+    }
+
+    /// Feeds a droplet directly (virtual loopback without pixels).
+    pub fn ingest(&mut self, droplet: &[u8]) -> Result<JsValue, JsValue> {
+        to_js(&self.inner.ingest(droplet).map_err(js_err)?)
+    }
+
+    pub fn frame(&self) -> Result<Vec<u8>, JsValue> {
+        self.inner.frame().map_err(js_err)
+    }
+
+    /// Bytes known so far (unknown blocks zero), for progressive image reveal only.
+    pub fn partial(&self) -> Vec<u8> {
+        self.inner.partial()
+    }
+
+    #[wasm_bindgen(js_name = decodedMap)]
+    pub fn decoded_map(&self) -> Vec<u8> {
+        self.inner.decoded_map().into_iter().map(u8::from).collect()
+    }
+
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+/// Palette index → [r, g, b] for the renderer.
+#[wasm_bindgen]
+pub fn chroma_palette() -> Vec<u8> {
+    (0..8u8).flat_map(chroma::palette_rgb).collect()
+}
+
+// --- V3: acoustic OFDM -------------------------------------------------------------
+
+/// PCM burst (32-carrier DQPSK OFDM, ≈ 4 kbit/s) for a frame up to 16 KB.
+#[wasm_bindgen]
+pub fn ofdm_modulate(frame: &[u8], sample_rate: u32) -> Result<Vec<f32>, JsValue> {
+    ofdm::modulate(frame, sample_rate).map_err(js_err)
+}
+
+/// Finds and decodes one OFDM burst. Returns metadata plus `frame: Uint8Array`.
+#[wasm_bindgen]
+pub fn ofdm_demodulate(samples: &[f32], sample_rate: u32) -> Result<JsValue, JsValue> {
+    let res = ofdm::demodulate(samples, sample_rate).map_err(js_err)?;
+    let obj = to_js(&res)?;
+    with_bytes(obj, "frame", &res.frame)
+}
+
+#[wasm_bindgen]
+pub fn ofdm_burst_seconds(frame_len: usize, sample_rate: u32) -> f64 {
+    ofdm::burst_seconds(frame_len, sample_rate)
 }

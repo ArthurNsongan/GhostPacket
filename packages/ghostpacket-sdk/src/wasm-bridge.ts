@@ -17,6 +17,9 @@ import {
   type KeyInfo,
   type Limits,
   type VerifiedFrame,
+  type ChromaScan,
+  type OfdmDecodeResult,
+  type WideStep,
 } from "./types";
 
 
@@ -216,6 +219,94 @@ export class Core {
 
   fountainRx(): FountainReceiver {
     return new FountainReceiver(new wasm.FountainRx());
+  }
+
+  // ---- V3: GPKT v2, identity vault, ChromaCrypt, OFDM ------------------------
+
+  /** Seals a GPKT v2 frame (payload ≤ 128 KB), e.g. a document carrying an image. */
+  encodeV2(draft: DocumentDraft, seed: Uint8Array, flags: number, passphrase?: string): Result<EncodedFrame> {
+    passphrase = normalizePassphrase(passphrase);
+    if (passphrase) {
+      const salt = new Uint8Array(this.limits.saltLen);
+      crypto.getRandomValues(salt);
+      return attempt("encode_v2_encrypted", () => wasm.encode_document_v2(draft, seed, flags, passphrase, salt) as EncodedFrame);
+    }
+    return attempt("encode_v2", () => wasm.encode_document_v2(draft, seed, flags) as EncodedFrame);
+  }
+
+  /** Seals a signing seed in an identity vault (PBKDF2 210k + ChaCha20-Poly1305). */
+  vaultSeal(seed: Uint8Array, passphrase: string): Result<Uint8Array> {
+    const salt = new Uint8Array(this.limits.saltLen);
+    crypto.getRandomValues(salt);
+    return attempt("vault_seal", () => wasm.vault_seal(seed, normalizePassphrase(passphrase) ?? "", salt));
+  }
+
+  vaultOpen(vault: Uint8Array, passphrase: string): Result<Uint8Array> {
+    return attempt("vault_open", () => wasm.vault_open(vault, normalizePassphrase(passphrase) ?? ""));
+  }
+
+  vaultIdentity(vault: Uint8Array): Result<KeyInfo> {
+    return attempt("vault_identity", () => wasm.vault_identity(vault) as KeyInfo);
+  }
+
+  chromaTx(frame: Uint8Array, session: number): Result<wasm.ChromaTx> {
+    return attempt("chroma_tx", () => new wasm.ChromaTx(frame, session & 0xffff));
+  }
+
+  chromaRx(): ChromaReceiver {
+    return new ChromaReceiver(new wasm.ChromaRx());
+  }
+
+  /** 8 × [r, g, b] for palette indices 0..7. */
+  chromaPalette(): Uint8Array {
+    return wasm.chroma_palette();
+  }
+
+  ofdmModulate(frame: Uint8Array, sampleRate: number): Result<Float32Array> {
+    return attempt("ofdm_modulate", () => wasm.ofdm_modulate(frame, sampleRate));
+  }
+
+  ofdmDemodulate(samples: Float32Array, sampleRate: number): Result<OfdmDecodeResult> {
+    return attempt("ofdm_demodulate", () => wasm.ofdm_demodulate(samples, sampleRate) as OfdmDecodeResult);
+  }
+
+  ofdmBurstSeconds(frameLen: number, sampleRate = 48_000): number {
+    return wasm.ofdm_burst_seconds(frameLen, sampleRate);
+  }
+}
+
+export class ChromaReceiver {
+  constructor(private readonly inner: wasm.ChromaRx) {}
+
+  /** Reads one RGBA camera image (never throws on an unreadable picture). */
+  scan(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): Result<ChromaScan> {
+    const bytes = rgba instanceof Uint8Array ? rgba : new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength);
+    return attempt("chroma_scan", () => this.inner.scan(bytes, width, height) as ChromaScan);
+  }
+
+  ingest(droplet: Uint8Array): Result<WideStep> {
+    return attempt("chroma_ingest", () => this.inner.ingest(droplet) as WideStep);
+  }
+
+  frame(): Result<Uint8Array> {
+    return attempt("chroma_frame", () => this.inner.frame());
+  }
+
+  /** Bytes known so far, unknown blocks zero: progressive image reveal only, never verification. */
+  partial(): Uint8Array {
+    return this.inner.partial();
+  }
+
+  decodedMap(): Uint8Array {
+    return this.inner.decodedMap();
+  }
+
+  reset(): void {
+    this.inner.reset();
+  }
+
+  free(): void {
+    this.inner.free();
   }
 }
 

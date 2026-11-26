@@ -27,8 +27,15 @@ These rules apply to all code in `crates/ghostpacket-core/src/`. The `wasm-no-pa
 | `MAX_DECOMPRESSED_BYTES` | 4096 bytes |
 | `MAX_SAMPLES` | 48000 × 40 (a 512-byte robust burst lasts ≈ 34 s) |
 | `MAX_PENDING_DROPLETS` | 256 |
+| `MAX_FRAME_SIZE_V2` / `MAX_PAYLOAD_LEN_V2` | 131 150 / 131 072 bytes (GPKT v2) |
+| `MAX_DECOMPRESSED_BYTES_V2` | 136 KB |
+| `MAX_IMAGE_BYTES` | 64 KB (also enforced while deserializing) |
+| `WIDE_MAX_K` / `WIDE_MAX_BLOCK` / wide pending | 512 / 1024 bytes / 2·K equations |
+| ChromaCrypt input image | ≤ 4096 × 4096 px, buffer length checked first |
+| `OFDM_MAX_FRAME` | 16 KB |
+| `VAULT_LEN` | 101 bytes |
 
-Any input over a bound is rejected **before** allocation.
+Any input over a bound is rejected **before** allocation. Floating-point DSP (`fsk.rs`, `ofdm.rs`, `chroma.rs`) uses the same Rust `libm` code in native tests and WASM; outputs are decisions (bytes), never trusted floats.
 
 ## Messages
 `GhostError::code()` is the stable contract with the UI. `Display` messages are short English sentences that include the measured values (sizes, CRC values, sample offsets).

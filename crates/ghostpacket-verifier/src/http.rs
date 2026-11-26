@@ -1,14 +1,14 @@
 //! Minimal HTTP/1.1 endpoint on `std::net` (no framework, no async runtime).
 //!
 //! ```text
-//! POST /v1/proofs   Content-Type: application/octet-stream, body = raw .gpkt (≤ 512 B)
+//! POST /v1/proofs   Content-Type: application/octet-stream, body = raw .gpkt (v1 ≤ 512 B, v2 ≤ 131 150 B)
 //!                   → 201 accepted | 409 replay | 422 rejected | 401 | 403 | 413 | 415 | 429 | 503
 //! GET  /v1/health   → 200 {"ok":true} (+ version and ledger size with a valid token)
 //! OPTIONS *         → CORS preflight
 //! ```
 //! Hardening:
 //! - one request per connection (`Connection: close`), whole request within a
-//!   5 s deadline (slow clients cannot hold a slot), head ≤ 2 KiB, body ≤ 512 B;
+//!   5 s deadline (slow clients cannot hold a slot), head ≤ 2 KiB, body ≤ 131 150 B (GPKT v2);
 //! - ≤ 32 connections in total and ≤ 4 per client IP; token bucket of 5
 //!   requests/s (burst 20) per IP;
 //! - strict parsing: one numeric Content-Length, no Transfer-Encoding, HTTP/1.x only;
@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use ghostpacket_core::protocol::MAX_FRAME_SIZE;
+use ghostpacket_core::protocol::MAX_ANY_FRAME_SIZE;
 
 use crate::Verifier;
 
@@ -253,7 +253,8 @@ fn read_request(stream: &mut TcpStream) -> Parsed {
             Some(_) => return Parsed::Fail(400, "BAD_CONTENT_LENGTH"),
         };
         // Bound before reading (and before allocating) the body.
-        if len > MAX_FRAME_SIZE {
+        // GPKT v2 frames (documents with an image) reach 131 150 bytes.
+        if len > MAX_ANY_FRAME_SIZE {
             return Parsed::Fail(413, "FRAME_TOO_LARGE");
         }
         while body.len() < len {

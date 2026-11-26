@@ -91,6 +91,6 @@ Vouchers are paid out at the pay-out desk (the treasurer's or a merchant's devic
 | Persistent issuer key, shared `github.io` origin | design | open decisions (tasks 4.1, 4.2) |
 
 ## Known limits
-- The issuer key lives for one tab session (product steering). A pharmacy's pin of a clinic key therefore lasts until the clinic reloads. Task 4.1 tracks the persistent-key decision.
+- Issuer apps now keep their key in a passphrase-sealed vault (`vault.rs`, spec `high-speed-transports`), so a pin survives reloads; "Continue with a session key" remains for the demo.
 - Records live in `localStorage` on a shared GitHub Pages origin. Other pages of the same `<user>.github.io` account could read them. They are not confidential until the apps move to a dedicated origin (task 4.2).
 - The plan's IndexedDB store was not used: bounded synchronous collections on the SDK key-value store are enough for hundreds of records and keep the Node tests simple.

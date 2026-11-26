@@ -12,6 +12,7 @@ const PORTAL = BASE.replace(/\/clinic$/, "") || "";
 export default function ClinicShell({ children }: { children: React.ReactNode }) {
   return (
     <AppFrame
+      persistentIdentity
       app="clinic"
       brand={["Ghost", "Clinic"]}
       homeLink={(c) => (
