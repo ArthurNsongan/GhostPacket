@@ -77,7 +77,7 @@ export function EncryptionToggle({
   demo?: boolean;
 }) {
   return (
-    <div className={`rounded-lg border p-3 ${value.on ? "border-ion/50 bg-ion/5" : "border-grid bg-void/40"}`}>
+    <div className={`rounded-lg p-3 ${value.on ? "bg-ion/10" : "bg-ink/[0.035]"}`}>
       <label className="flex items-center justify-between gap-2 text-[12px]">
         <span>
           <span className="font-semibold text-ink">End-to-end encryption</span>{" "}
@@ -95,6 +95,7 @@ export function EncryptionToggle({
             value={value.passphrase}
             disabled={disabled}
             maxLength={limits.maxPassphraseBytes}
+            aria-label="Encryption passphrase"
             onChange={(e) => onChange({ ...value, passphrase: e.target.value })}
             className="mt-1 w-full rounded-md bg-ink/[0.045] px-2 py-1.5 font-mono text-sm text-ink outline-none focus:bg-ink/[0.08]"
           />

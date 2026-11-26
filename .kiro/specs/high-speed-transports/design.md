@@ -59,7 +59,56 @@ OFDM     [chirp 1.2→7.2 kHz 43 ms][gap 256][reference][2 header symbols][data]
 - Verifier: accepts v2 frames (≤ 131 150 B) and summarizes images in its JSON (size, SHA-256).
 - MCP: `inspect_frame_hex` takes `passphrase` and has `encrypted` and `image` samples; `run_channel_benchmark` takes `image_kb` for OFDM and ChromaCrypt.
 
-## Not in this iteration
-- **Ultrasonic Whisper** (17.5–19.8 kHz): many phone microphones and laptop speakers roll off above 16 kHz. It needs field measurements before a modem design.
-- **WebRTC QR-signaled LAN**: needs a shared hotspot and two live devices to test, and opens a network path that product rule 3 currently excludes.
-- **Chimera Turbo** (ChromaCrypt and OFDM feeding one decoder): the two transports use different codes (wide fountain vs RS blocks). A shared droplet format over OFDM is the next step.
+## Phase 3: round ledger, Chimera Turbo, Ultrasonic Whisper, WebRTC LAN
+| Module | Content |
+|---|---|
+| `schema.rs` | `DocumentBody::LedgerBatchDelta` appended last (doc type 0x06): 1..=64 `LedgerEntry { member, amount_minor, receipt_id }`, duplicate receipt ids refused |
+| `fountain_wide.rs` | `WideEncoder::bundle` (droplets back to back, ≤ 16 KB), `split_bundle` (length from each header, no copy), `WideDecoder::ingest_bundle` (bad droplets counted, not fatal), `SOUND_SEED_BASE = 0x8000_0000` |
+| `fsk.rs` | `FskMode::Ultrasonic` (code 2): same Barker-13 + Goertzel + RS modem on a second tone plan, 5 ms symbols, 2.5 ms window, frames ≤ 256 B, ≥ 44.1 kHz |
+| SDK `chimera-turbo.ts` | virtual run (both lanes in real time, live sabotage), field emitter (matrices + OFDM bundles on the speaker) |
+| SDK `lan-link.ts` | `LanLink` (offer / answer / accept / send), compact code parser and SDP rebuild, QR text scanner |
+| SDK `ledger-batch.ts` | `sealCompact` (v1 if it fits, else v2), totals |
+| UI | `VirtualBroadcast` (any acoustic mode over the virtual air), `ChimeraTurboLab`, `LanLinkPanel` (virtual and field), `WhisperIdentity`; `AirSender` / `AirReceiver` gain Chimera Turbo and the ultrasonic mode; `SpectrogramCanvas` bands (FSK, OFDM, ultrasonic) |
+
+### Decisions
+| Topic | Choice | Rejected | Reason |
+|---|---|---|---|
+| Chimera over sound | whole wide droplets in an OFDM burst (bundle of 2) | RS blocks of the frame over OFDM, a new code | one decoder and one droplet format; every droplet keeps its own CRC32, so a burst that decodes with one bad droplet still counts |
+| Ultrasonic modem | the 4-FSK modem on a 17.6–19.6 kHz tone plan | chirp spread spectrum, OFDM above 17 kHz | reuses the tested Barker sync, timing tracker and RS; 400 Hz spacing stays orthogonal over a 2.5 ms window |
+| Ultrasonic payload | a signed identity card (custom message, title "Identity card") | an unsigned key string | the signature proves possession of the key; the label is still checked by comparing the fingerprint |
+| LAN signaling | compact text (≈ 200 characters) rebuilt into a data-channel SDP | the full SDP, deflated | a smaller QR, and only validated fields reach `setRemoteDescription` (no SDP injection) |
+| LAN answer path | QR code or one OFDM burst | a camera on both sides | a PC without a usable webcam still hears the phone's answer |
+| LAN and product rule 3 | allowed: user-initiated, host candidates only, no ICE / signaling server | STUN for NAT traversal | nothing leaves the local network; frames are verified as on any other channel |
+| Round ledger anti-replay | the ledger's own doc id, in the member's "receipts" scope | one ledger entry per receipt | the receipts are already individual documents; the ledger is a signed summary |
+
+### Wire formats
+```text
+Bundle     [droplet 1][droplet 2]…  each = [GW][session][K][block][total][seed][data][CRC32], ≤ 16 KB in total
+LAN code   GPLAN1|o or a|ice-ufrag|ice-pwd|SHA-256 fingerprint (64 hex)|actpass, active or passive|candidate,candidate…
+           candidate = "<foundation> 1 udp <priority> <address or mDNS name> <port> typ host" (≤ 4)
+Ultrasonic same as 4-FSK: [lead][Barker-13 17.6 / 19.6 kHz][guard 3][RS header][RS data][tail], data tones 18.0 / 18.4 / 18.8 / 19.2 kHz
+```
+
+### Bounds
+| Constant | Value |
+|---|---|
+| `MAX_LEDGER_ENTRIES` | 64 |
+| `MAX_BUNDLE_BYTES` | 16 KB (one OFDM frame) |
+| `ULTRASONIC_MAX_FRAME` / `ULTRASONIC_MIN_SAMPLE_RATE` | 256 B / 44 100 Hz |
+| LAN code / candidates / message | ≤ 1024 characters / ≤ 4 host candidates / ≤ 131 150 B |
+
+### Measured (Rust tests, MCP benchmark, headless Chrome E2E)
+| Measure | Value |
+|---|---|
+| Chimera Turbo, 10.6 KB E2EE image, camera covered for the first 6 s, 30 % matrices lost, 15 dB | rebuilt in 8.0 s, 17–21 droplets by light and 4–6 by sound, K = 22 |
+| Ultrasonic identity card (155 B), 15 dB | 3.6 s burst, ≈ 340 bit/s effective, 4 / 4 decoded; tests pass at 10 dB at 44.1 and 48 kHz |
+| Ultrasonic leakage under 16 kHz | more than 30 dB below the signal (test) |
+| WebRTC LAN, virtual (two peers in one page) | codes of 195–197 characters, link open in 2.2–3.2 s, 10.6 KB delivered in 7–15 ms |
+| Round ledger, 4 contributions | 352 B, GPKT v1; 20 contributions need v2 (test) |
+| WASM size | 285 KB gzip (budget 350 KB) |
+
+### Limits
+- Ultrasonic Whisper depends on the hardware: many laptop speakers and some phone microphones roll off above 18 kHz. It is best-effort and untested on real devices so far; the identity QR stays the reference ceremony.
+- The sound lane of Chimera Turbo is slow (≈ 0.7 droplet per second): it keeps a transfer alive while the camera is blocked, it does not make it much faster.
+- WebRTC LAN needs both devices on the same Wi-Fi or hotspot, and mDNS host candidates must resolve between them (some managed networks block it). A neighbour who answers first gets the frame, which is still signed and optionally encrypted.
+- Not done: IndexedDB storage (localStorage is used), X25519 key agreement (passphrase-based E2EE only), Supabase backend (replaced by `ghostpacket-verifier`).

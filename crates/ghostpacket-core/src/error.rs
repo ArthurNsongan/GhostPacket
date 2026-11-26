@@ -54,6 +54,8 @@ pub enum GhostError {
     ImageTooLarge { len: usize, max: usize },
     ImageFormatInvalid,
     ImageHashMismatch,
+    // --- Round ledgers (LedgerBatchDelta) -------------------------------------
+    LedgerBatchInvalid { reason: &'static str },
     // --- ChromaCrypt color matrix ------------------------------------------
     ChromaNotFound,
     ChromaUncorrectable,
@@ -110,6 +112,7 @@ impl GhostError {
             GhostError::ImageTooLarge { .. } => "IMAGE_TOO_LARGE",
             GhostError::ImageFormatInvalid => "IMAGE_FORMAT_INVALID",
             GhostError::ImageHashMismatch => "IMAGE_HASH_MISMATCH",
+            GhostError::LedgerBatchInvalid { .. } => "LEDGER_BATCH_INVALID",
             GhostError::ChromaNotFound => "CHROMA_NOT_FOUND",
             GhostError::ChromaUncorrectable => "CHROMA_UNCORRECTABLE",
             GhostError::ChromaInvalidImage => "CHROMA_INVALID_IMAGE",
@@ -226,6 +229,7 @@ impl fmt::Display for GhostError {
             GhostError::ImageHashMismatch => {
                 write!(f, "Image bytes do not match their signed SHA-256")
             }
+            GhostError::LedgerBatchInvalid { reason } => write!(f, "Invalid round ledger: {reason}"),
             GhostError::ChromaNotFound => write!(f, "No ChromaCrypt matrix found in the image"),
             GhostError::ChromaUncorrectable => {
                 write!(f, "ChromaCrypt matrix unreadable: too many cell errors for Reed-Solomon")

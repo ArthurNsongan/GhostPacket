@@ -4,7 +4,8 @@
 //   node scripts/build-pages.mjs --base /GhostPacket && node scripts/e2e/apps.mjs [pages-out]
 //   GP_BASE_URL=https://<user>.github.io/GhostPacket node scripts/e2e/apps.mjs   (deployed site)
 // GhostClinic: seeded ward → sign → virtual hand-over → verify → dispense once → refuse twice.
-// GhostTontine: contribution receipt → wallet; aid voucher → redeem once → refuse twice.
+// GhostTontine: contribution receipt → wallet; aid voucher → redeem once → refuse twice; round ledger over OFDM.
+// Portal high-speed lab: OFDM image, E2EE image over Chimera Turbo, WebRTC LAN, Ultrasonic Whisper.
 // Both: storage isolation, Clean Field Mode, service worker scope, no error, no external request, no 404.
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
@@ -137,6 +138,10 @@ await send("Runtime.enable");
 await send("Network.enable");
 
 // ---- GhostClinic -------------------------------------------------------------
+// GP_ONLY=clinic,tontine,portal runs a subset (debugging).
+const ONLY = process.env.GP_ONLY?.split(",");
+const want = (s) => !ONLY || ONLY.includes(s);
+if (want("clinic")) {
 await go("/clinic/");
 // Persistent issuer identity: create, reload, wrong passphrase, unlock, same fingerprint.
 check("clinic: asks to create the issuer identity", await until(`document.body.innerText.includes("Create and seal the key")`, 20000));
@@ -199,7 +204,9 @@ await click("Hand over the photo");
 const pic = await until(`document.body.innerText.includes("Signed attachment for RX-") && document.body.innerText.includes("ED25519 VERIFIED") && [...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 60000);
 check("clinic: photo rebuilt from color matrices (30 % lost), verified and shown", pic, (await text()).match(/ChromaCrypt · [^\n]*/)?.[0]);
 
+}
 // ---- GhostTontine ------------------------------------------------------------
+if (want("tontine")) {
 await go("/tontine/");
 await until(`document.body.innerText.includes("Continue with a session key")`, 20000);
 await click("Continue with a session key");
@@ -223,8 +230,21 @@ await click("Redeemed ✓");
 check("tontine: same voucher refused the second time (REPLAY)", await until(`document.body.innerText.includes("Already redeemed") && /REPLAY/.test(document.body.innerText)`));
 const tkeys = await ev(`Object.keys(localStorage)`);
 check("tontine: clinic data invisible to the tontine", tkeys.some((k) => k.startsWith("tontine:")) && !(await ev(`document.body.innerText.includes("PAT-0815")`)));
+// Round ledger (LedgerBatchDelta): every contribution of the round in one frame, one OFDM chord for the room.
+await click("· contributions");
+await until(`document.body.innerText.includes("Record every remaining contribution")`);
+await click("Record every remaining contribution");
+await until(`!/Record contribution/.test(document.body.innerText)`, 5000);
+await click("Seal the round ledger");
+const ledger = await until(`(document.body.innerText.match(/Round \\d+ ledger LDG-[A-Z0-9]{4} · [^\\n]*GPKT v\\d[^\\n]*/) || [])[0]`, 10000);
+check("tontine: round ledger signed (every contribution, one frame)", ledger, ledger);
+await click("Broadcast the round ledger");
+const kept = await until(`(document.body.innerText.match(/Round \\d+ ledger kept: \\d+ contribution\\(s\\)[^\\n]*/) || [])[0]`, 60000);
+check("tontine: ledger broadcast over the OFDM chord, verified, receipts cross-checked", kept && /confirms [1-9]\d* receipt/.test(kept), kept);
 
+}
 // ---- Portal: V3 high-speed lab, OFDM ---------------------------------------------
+if (want("portal")) {
 await go("/simulation/");
 await until(`document.body.innerText.includes("V3 high-speed lab")`, 20000);
 await click("Use the sample");
@@ -237,6 +257,42 @@ const ofdm = await until(`(document.body.innerText.match(/OFDM · \\d+ B in [\\d
 const ofdmImg = await until(`[...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 5000);
 check("portal: image over the OFDM chord (15 dB SNR), verified and shown", ofdm && ofdmImg, ofdm);
 
+// E2EE image through Chimera Turbo (camera covered for 6 s: both lanes must count), then unlock.
+// The high-speed lab comes after the dual-canvas workbench: its inputs are the last ones with a given label.
+const lab = `document`;
+const last = (label) => `[...document.querySelectorAll(${JSON.stringify(`input[aria-label="${label}"]`)})].at(-1)`;
+const typeIn = (_scope, label, value) =>
+  ev(`(() => { const el = ${last(label)}; if (!el) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`);
+await ev(`${last("Encrypt the payload")}.click()`);
+await sleep(200);
+await typeIn(lab, "Encryption passphrase", PASS);
+await click("Sign and encrypt the image");
+check("portal: image sealed with E2EE (GPKT v2)", await until(`/KB · GPKT v2 · E2EE/.test(document.body.innerText)`, 15000));
+await click("Chimera Turbo (both)");
+await click("Send through Chimera Turbo");
+const turbo = await until(`(document.body.innerText.match(/Chimera Turbo · [\\d.]+ KB in [\\d.]+ s[^\\n]*by sound[^\\n]*/) || [])[0]`, 90000);
+const lanes = turbo?.match(/(\d+) droplet\(s\) by light, (\d+) by sound/);
+check("portal: Chimera Turbo rebuilds the frame from light and sound together", lanes && Number(lanes[1]) > 0 && Number(lanes[2]) > 0, turbo);
+check("portal: encrypted frame refused without the passphrase", await until(`document.body.innerText.includes("PASSPHRASE_REQUIRED")`, 5000));
+const typed = await typeIn(lab, "Receiver passphrase", PASS);
+await sleep(300);
+await click("Decrypt and verify");
+const opened = await until(`/Chimera Turbo · \\d+ B · CRC32/.test(document.body.innerText) && [...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 10000);
+check("portal: E2EE image decrypted with the shared passphrase, verified and shown", opened, opened ? "" : String(await ev(`document.body.innerText`)).match(/(Corrupted spirit rejected|ED25519 VERIFIED|Receiver passphrase)[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## "));
+// WebRTC LAN, two peers in the page, signaled through real QR rendering and reading.
+await click("WebRTC LAN");
+await click("Send over a virtual WebRTC LAN link");
+const lan = await until(`(document.body.innerText.match(/WebRTC LAN · offer \\d+ chars[^\\n]*delivered in \\d+ ms/) || [])[0]`, 30000);
+const lanOk = await until(`/WebRTC LAN · \\d+ B · CRC32/.test(document.body.innerText) && document.body.innerText.includes("ED25519 VERIFIED")`, 5000);
+check("portal: WebRTC LAN link (QR-signaled, no server) delivers the frame", lan && lanOk, lanOk ? lan : `${lan} ## ${String(await ev(`document.body.innerText`)).match(/(Corrupted spirit rejected|ED25519 VERIFIED)[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## ")}`);
+// Ultrasonic Whisper: identity card at 17.6–19.6 kHz, then pin.
+await click("Whisper the identity card");
+const whisper = await until(`document.body.innerText.includes("IDENTITY CARD · ED25519 VERIFIED") && (document.body.innerText.match(/Ultrasonic whisper · \\d+ B in [^\\n]*/) || [])[0]`, 30000);
+await click("The fingerprints match: pin this key");
+const pinnedKey = await until(`document.body.innerText.includes("Pinned in this device")`, 5000);
+check("portal: Ultrasonic Whisper identity card verified and pinned", whisper && pinnedKey, whisper);
+
+}
 // ---- Portal links -------------------------------------------------------------
 await go("/");
 const links = await ev(`[...document.querySelectorAll("a")].map((a) => a.getAttribute("href")).filter((h) => /clinic|tontine/.test(h)).join(" ")`);

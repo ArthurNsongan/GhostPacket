@@ -6,7 +6,7 @@
 import { readKeyring } from "./keyring";
 import { FLAG_DEMO, type DocumentBody, type VerifiedFrame } from "./types";
 
-export type DocKind = "medicalPrescription" | "emergencyVoucher" | "tontineReceipt" | "customMessage";
+export type DocKind = "medicalPrescription" | "emergencyVoucher" | "tontineReceipt" | "customMessage" | "imageDocument" | "ledgerBatchDelta";
 
 export type GateReason = "WRONG_DOCUMENT" | "DEMO_FRAME" | "UNPINNED_ISSUER" | "FUTURE_TIMESTAMP" | "EXPIRED";
 

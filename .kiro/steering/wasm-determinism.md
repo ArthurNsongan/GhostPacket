@@ -34,6 +34,9 @@ These rules apply to all code in `crates/ghostpacket-core/src/`. The `wasm-no-pa
 | ChromaCrypt input image | ≤ 4096 × 4096 px, buffer length checked first |
 | `OFDM_MAX_FRAME` | 16 KB |
 | `VAULT_LEN` | 101 bytes |
+| `ULTRASONIC_MAX_FRAME` | 256 bytes (and ≥ 44.1 kHz) |
+| `MAX_LEDGER_ENTRIES` | 64 |
+| `MAX_BUNDLE_BYTES` | 16 KB (Chimera Turbo droplet bundle) |
 
 Any input over a bound is rejected **before** allocation. Floating-point DSP (`fsk.rs`, `ofdm.rs`, `chroma.rs`) uses the same Rust `libm` code in native tests and WASM; outputs are decisions (bytes), never trusted floats.
 

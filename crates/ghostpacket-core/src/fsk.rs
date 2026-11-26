@@ -8,7 +8,10 @@
 //! [data: frame split in chunks of <=239 B, each + 16 RS parity bytes]
 //! [tail 1 @1200 Hz, ramp-out]
 //! ```
-//! Analysis windows are centred in each symbol. Their length (5 ms / 12.5 ms)
+//! Ultrasonic Whisper (V3) is the same modem moved to 17.6–19.6 kHz with 5 ms
+//! symbols (400 bit/s), for short frames (≤ 256 B) such as an identity card.
+//!
+//! Analysis windows are centred in each symbol. Their length (5 ms / 12.5 ms, 2.5 ms ultrasonic)
 //! makes the 400 Hz tone spacing an integer number of cycles, so the four
 //! data tones are orthogonal for the Goertzel detector.
 
@@ -39,6 +42,23 @@ pub const AMPLITUDE: f32 = 0.7;
 /// Minimum normalised Barker correlation (range -1..1) to accept a preamble.
 pub const PREAMBLE_THRESHOLD: f32 = 0.55;
 
+/// Ultrasonic Whisper band: 400 Hz spacing, orthogonal over the 2.5 ms window.
+pub const ULTRA_DATA_FREQS: [f32; 4] = [18_000.0, 18_400.0, 18_800.0, 19_200.0];
+pub const ULTRA_SYNC_LOW_HZ: f32 = 17_600.0;
+pub const ULTRA_SYNC_HIGH_HZ: f32 = 19_600.0;
+/// The 19.6 kHz tone aliases below 39.2 kHz; 44.1 kHz keeps a margin and is the
+/// lowest common rate of sound hardware that can still play it.
+pub const ULTRASONIC_MIN_SAMPLE_RATE: u32 = 44_100;
+/// Identity cards and pairing tokens only: a 256-byte frame lasts ≈ 6 s.
+pub const ULTRASONIC_MAX_FRAME: usize = 256;
+
+/// Tone plan of a mode.
+struct Band {
+    data: [f32; 4],
+    low: f32,
+    high: f32,
+}
+
 /// Gray mapping: 2-bit value -> tone index, and its inverse (same table).
 const GRAY: [usize; 4] = [0, 1, 3, 2];
 
@@ -49,6 +69,8 @@ pub enum FskMode {
     Robust,
     /// 6 ms symbols, 333 bit/s: judge demo loopback.
     Fast,
+    /// 5 ms symbols at 17.6–19.6 kHz, 400 bit/s: near-silent short frames.
+    Ultrasonic,
 }
 
 impl FskMode {
@@ -56,6 +78,7 @@ impl FskMode {
         match code {
             0 => Ok(FskMode::Robust),
             1 => Ok(FskMode::Fast),
+            2 => Ok(FskMode::Ultrasonic),
             _ => Err(GhostError::InvalidArgument { what: "fsk mode" }),
         }
     }
@@ -64,6 +87,7 @@ impl FskMode {
         match self {
             FskMode::Robust => 0.015,
             FskMode::Fast => 0.006,
+            FskMode::Ultrasonic => 0.005,
         }
     }
 
@@ -71,6 +95,22 @@ impl FskMode {
         match self {
             FskMode::Robust => 0.0125,
             FskMode::Fast => 0.005,
+            FskMode::Ultrasonic => 0.0025,
+        }
+    }
+
+    fn band(self) -> Band {
+        match self {
+            FskMode::Ultrasonic => Band { data: ULTRA_DATA_FREQS, low: ULTRA_SYNC_LOW_HZ, high: ULTRA_SYNC_HIGH_HZ },
+            _ => Band { data: DATA_FREQS, low: SYNC_LOW_HZ, high: SYNC_HIGH_HZ },
+        }
+    }
+
+    /// Largest frame the mode carries.
+    pub fn max_frame(self) -> usize {
+        match self {
+            FskMode::Ultrasonic => ULTRASONIC_MAX_FRAME,
+            _ => MAX_FRAME_SIZE,
         }
     }
 }
@@ -82,7 +122,8 @@ struct Timing {
 }
 
 fn timing(sample_rate: u32, mode: FskMode) -> Result<Timing, GhostError> {
-    if !(MIN_SAMPLE_RATE..=MAX_SAMPLE_RATE).contains(&sample_rate) {
+    let min = if mode == FskMode::Ultrasonic { ULTRASONIC_MIN_SAMPLE_RATE } else { MIN_SAMPLE_RATE };
+    if !(min..=MAX_SAMPLE_RATE).contains(&sample_rate) {
         return Err(GhostError::InvalidSampleRate { rate: sample_rate });
     }
     let fs = sample_rate as f64;
@@ -128,10 +169,11 @@ fn bytes_to_tones(bytes: &[u8], out: &mut Vec<usize>) {
 
 /// Generates the PCM burst (mono f32, -1..1) for `frame`.
 pub fn modulate(frame: &[u8], sample_rate: u32, mode: FskMode) -> Result<Vec<f32>, GhostError> {
-    if frame.is_empty() || frame.len() > MAX_FRAME_SIZE {
+    if frame.is_empty() || frame.len() > mode.max_frame() {
         return Err(GhostError::FskInvalidLength { len: frame.len() });
     }
     let t = timing(sample_rate, mode)?;
+    let band = mode.band();
     let total = total_symbols(frame.len());
     let total_samples = (total as f64 * t.ns).round() as usize;
     if total_samples > MAX_SAMPLES {
@@ -140,11 +182,11 @@ pub fn modulate(frame: &[u8], sample_rate: u32, mode: FskMode) -> Result<Vec<f32
 
     // Symbol plan as frequencies.
     let mut freqs: Vec<f32> = Vec::with_capacity(total);
-    freqs.push(SYNC_LOW_HZ);
+    freqs.push(band.low);
     for &chip in BARKER13.iter() {
-        freqs.push(if chip > 0 { SYNC_HIGH_HZ } else { SYNC_LOW_HZ });
+        freqs.push(if chip > 0 { band.high } else { band.low });
     }
-    freqs.extend(std::iter::repeat_n(SYNC_LOW_HZ, GUARD_SYMBOLS));
+    freqs.extend(std::iter::repeat_n(band.low, GUARD_SYMBOLS));
     let len_u16 = u16::try_from(frame.len()).map_err(|_| GhostError::FskInvalidLength {
         len: frame.len(),
     })?;
@@ -161,9 +203,9 @@ pub fn modulate(frame: &[u8], sample_rate: u32, mode: FskMode) -> Result<Vec<f32
         offset += size;
     }
     for tone in tones {
-        freqs.push(DATA_FREQS.get(tone).copied().unwrap_or(DATA_FREQS[0]));
+        freqs.push(band.data.get(tone).copied().unwrap_or(band.data[0]));
     }
-    freqs.push(SYNC_LOW_HZ);
+    freqs.push(band.low);
 
     // Continuous-phase synthesis with raised-cosine ramps on lead/tail symbols.
     let fs = sample_rate as f64;
@@ -277,8 +319,8 @@ fn barker_score(samples: &[f32], w: usize, t: &Timing, g: &Goertzel, buf: &mut [
 
 /// Finds the preamble and returns `(t0, score)` where `t0` is the sample index
 /// of the first Barker symbol.
-fn find_preamble(samples: &[f32], sample_rate: u32, t: &Timing) -> Result<(usize, f32), GhostError> {
-    let g = Goertzel::new(&[SYNC_LOW_HZ, SYNC_HIGH_HZ], sample_rate);
+fn find_preamble(samples: &[f32], sample_rate: u32, t: &Timing, band: &Band) -> Result<(usize, f32), GhostError> {
+    let g = Goertzel::new(&[band.low, band.high], sample_rate);
     let mut buf = [0.0f32; 2];
     let needed = ((BARKER13.len() + GUARD_SYMBOLS + 24) as f64 * t.ns).ceil() as usize;
     if samples.len() < needed + t.nw {
@@ -429,8 +471,8 @@ pub fn demodulate(samples: &[f32], sample_rate: u32, mode: FskMode) -> Result<Fs
         return Err(GhostError::TooManySamples { len: samples.len() });
     }
     let t = timing(sample_rate, mode)?;
-    let (t0, score) = find_preamble(samples, sample_rate, &t)?;
-    decode_from(samples, sample_rate, t, t0, score).map_err(|e| match e {
+    let (t0, score) = find_preamble(samples, sample_rate, &t, &mode.band())?;
+    decode_from(samples, sample_rate, t, t0, score, mode).map_err(|e| match e {
         GhostError::FskTooShort => GhostError::FskIncomplete { sync_offset: t0 },
         other => other,
     })
@@ -442,13 +484,14 @@ fn decode_from(
     t: Timing,
     t0: usize,
     score: f32,
+    mode: FskMode,
 ) -> Result<FskDecodeResult, GhostError> {
 
     let mut reader = SymbolReader {
         samples,
         t,
         t0,
-        g: Goertzel::new(&DATA_FREQS, sample_rate),
+        g: Goertzel::new(&mode.band().data, sample_rate),
         next: BARKER13.len() + GUARD_SYMBOLS,
         offset: 0.0,
         snr_sum: 0.0,
@@ -463,7 +506,7 @@ fn decode_from(
         [hi, lo] => u16::from_be_bytes([*hi, *lo]) as usize,
         _ => return Err(GhostError::FecUncorrectable),
     };
-    if len == 0 || len > MAX_FRAME_SIZE {
+    if len == 0 || len > mode.max_frame() {
         return Err(GhostError::FskInvalidLength { len });
     }
 
@@ -597,5 +640,50 @@ mod tests {
             .0;
         let hz = peak as f32 * fs / 1024.0;
         assert!((hz - 2400.0).abs() < 50.0, "peak at {hz} Hz");
+    }
+
+    #[test]
+    fn ultrasonic_roundtrip_in_noise_at_48k_and_44k1() {
+        let frame = sample_frame(180);
+        for (fs, seed) in [(48_000u32, 7u64), (44_100, 8)] {
+            let pcm = modulate(&frame, fs, FskMode::Ultrasonic).unwrap();
+            let mut padded = vec![0.0f32; 7_000];
+            padded.extend_from_slice(&pcm);
+            padded.extend(std::iter::repeat_n(0.0, 3_000));
+            let noisy = crate::channel_sim::inject_awgn(&padded, 10.0, seed);
+            let res = demodulate(&noisy, fs, FskMode::Ultrasonic).unwrap();
+            assert_eq!(res.frame, frame, "{fs} Hz");
+        }
+        // 400 bit/s: a 180-byte frame lasts under 5 s.
+        assert!(burst_seconds(180, FskMode::Ultrasonic) < 5.0);
+    }
+
+    #[test]
+    fn ultrasonic_burst_stays_above_17khz() {
+        let pcm = modulate(&sample_frame(120), 48_000, FskMode::Ultrasonic).unwrap();
+        let mut sa = SpectrumAnalyzer::new(1024).unwrap();
+        // Skip the ramped lead symbol; compare audible and ultrasonic energy.
+        let (mut audible, mut ultra) = (0.0f64, 0.0f64);
+        for chunk in pcm[480..].chunks_exact(1024).take(40) {
+            let mag = sa.compute(chunk);
+            for (i, &db) in mag.iter().enumerate() {
+                let hz = i as f32 * 48_000.0 / 1024.0;
+                let p = 10f64.powf(db as f64 / 10.0);
+                if hz < 16_000.0 {
+                    audible += p;
+                } else {
+                    ultra += p;
+                }
+            }
+        }
+        let ratio_db = 10.0 * (audible / ultra).log10();
+        assert!(ratio_db < -30.0, "audible band only {ratio_db:.1} dB below the signal");
+    }
+
+    #[test]
+    fn ultrasonic_refuses_low_rates_and_long_frames() {
+        assert_eq!(modulate(&sample_frame(10), 32_000, FskMode::Ultrasonic).unwrap_err(), GhostError::InvalidSampleRate { rate: 32_000 });
+        assert!(matches!(modulate(&sample_frame(ULTRASONIC_MAX_FRAME + 1), 48_000, FskMode::Ultrasonic).unwrap_err(), GhostError::FskInvalidLength { .. }));
+        assert!(modulate(&sample_frame(ULTRASONIC_MAX_FRAME), 48_000, FskMode::Ultrasonic).is_ok());
     }
 }

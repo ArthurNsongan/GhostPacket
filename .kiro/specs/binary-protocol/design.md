@@ -33,7 +33,8 @@ enum DocumentBody {
     MedicalPrescription { clinic, practitioner, patient_ref, items: Vec<{drug, dosage, days}>, note }, // 0x02
     EmergencyVoucher { program, distributor, beneficiary_ref, items: Vec<{label, quantity, unit}>, valid_until: u64, note }, // 0x03
     CustomMessage { sender, title, message },                                                       // 0x04 (V2)
-    ImageDocument { title, subject_ref, caption, related_doc_id: [u8; 8], mime: u8, width: u16, height: u16, image: bytes }, // 0x05 (V3, GPKT v2, appended last)
+    ImageDocument { title, subject_ref, caption, related_doc_id: [u8; 8], mime: u8, width: u16, height: u16, image: bytes }, // 0x05 (V3, GPKT v2)
+    LedgerBatchDelta { group, collector, currency, cycle: u16, entries: Vec<{member, amount_minor: u64, receipt_id: [u8; 8]}>, note }, // 0x06 (V3, 1..=64 entries, appended last)
 }
 ```
 Bounds: fields ≤ 64 B, `currency` ≤ 8 B, `unit` ≤ 16 B, `note` ≤ 120 B, `items` ≤ 8. Custom message: `sender` ≤ 48 B, `title` ≤ 60 B, `message` ≤ 240 B, so the worst case fits in 511 B even encrypted.

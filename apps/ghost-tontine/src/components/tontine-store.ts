@@ -14,7 +14,8 @@ export interface Member extends RecordBase {
 }
 
 export interface Issued extends RecordBase {
-  kind: "receipt" | "voucher";
+  /** "batch" = a round ledger (LedgerBatchDelta) listing the receipts of one round. */
+  kind: "receipt" | "voucher" | "batch";
   memberId: string;
   docId: string;
   cycle: number;
@@ -26,7 +27,7 @@ export interface Issued extends RecordBase {
 
 /** What a member's phone keeps after verifying a document (no frame, no free text). */
 export interface WalletEntry extends RecordBase {
-  kind: "receipt" | "voucher";
+  kind: "receipt" | "voucher" | "ledger";
   docId: string;
   group: string;
   amount: number;

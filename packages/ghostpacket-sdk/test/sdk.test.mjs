@@ -11,8 +11,16 @@ import { fileURLToPath } from "node:url";
 import {
   clearLedger,
   collection,
+  compactSdp,
+  encodeSignal,
+  expandSignal,
   GhostPacketSDK,
+  identityCardDraft,
+  identityCardLabel,
   identityText,
+  ledgerTotal,
+  parseSignal,
+  sealCompact,
   isGuarded,
   parseIdentity,
   readLedger,
@@ -214,5 +222,90 @@ describe("offline-to-cloud sync with ghostpacket-verifier", () => {
     assert.ok(r.networkError);
     assert.equal(gp.outbox.pending().length, 1);
     assert.match((await gp.syncProofs("http://example.com/v1/proofs")).networkError, /https/);
+  });
+});
+
+describe("V3 transports: ultrasonic, Chimera bundles, round ledgers, LAN codes", () => {
+  test("Ultrasonic Whisper round-trips an identity card, and refuses rates under 44.1 kHz", () => {
+    const card = gp.core.encode(identityCardDraft("Ndiob health post"), new Uint8Array(32).fill(7), 0);
+    assert.ok(card.ok && card.value.frameLen <= gp.core.limits.ultrasonicMaxFrame);
+    const pcm = gp.core.fskModulate(card.value.frame, 48_000, "ultrasonic");
+    assert.ok(pcm.ok);
+    const back = gp.core.fskDemodulate(pcm.value, 48_000, "ultrasonic");
+    assert.ok(back.ok);
+    const v = gp.verifyFrame(back.value.frame);
+    assert.equal(identityCardLabel(v.value.document.body), "Ndiob health post");
+    assert.equal(gp.core.fskModulate(card.value.frame, 16_000, "ultrasonic").error?.code, "INVALID_SAMPLE_RATE");
+  });
+  test("Chimera bundles from the sound lane feed the same decoder as matrices", () => {
+    const frame = new Uint8Array(6000).map((_, i) => (i * 13) & 0xff);
+    const tx = gp.core.chromaTx(frame, 42).value;
+    const rx = gp.core.chromaRx();
+    const base = gp.core.limits.chimeraSoundSeedBase;
+    let done = false;
+    for (let i = 0; i < 80 && !done; i++) {
+      const s = i % 2 ? rx.ingest(tx.droplet(i)) : rx.ingestBundle(tx.bundle(base + i * 2, 2));
+      assert.ok(s.ok);
+      done = (i % 2 ? s.value : s.value.step).complete;
+    }
+    assert.ok(done);
+    assert.deepEqual(Array.from(rx.frame().value), Array.from(frame));
+    assert.equal(rx.ingestBundle(new Uint8Array(10)).error?.code, "DROPLET_INVALID");
+    rx.free();
+    tx.free();
+  });
+  test("a round ledger ships as v1 when small and v2 when large", () => {
+    const draft = (n) => ({
+      docId: Array.from("LDG-0001", (c) => c.charCodeAt(0)),
+      timestamp: 1_793_448_000,
+      body: {
+        ledgerBatchDelta: {
+          group: "Médina tontine",
+          collector: "Fatou Ndiaye",
+          currency: "XOF",
+          cycle: 9,
+          entries: Array.from({ length: n }, (_, i) => ({ member: `Member ${i} (#${i + 1})`, amountMinor: 25_000 + i, receiptId: Array.from(`TNT-${String(i).padStart(4, "0")}`, (c) => c.charCodeAt(0)) })),
+          note: "",
+        },
+      },
+    });
+    const seed = new Uint8Array(32).fill(7);
+    assert.equal(sealCompact(gp.core, draft(3), seed, 0).value.version, 1);
+    const big = sealCompact(gp.core, draft(40), seed, 0);
+    assert.equal(big.value.version, 2);
+    const v = gp.verifyFrame(big.value.frame);
+    assert.equal(v.value.docType, 6);
+    assert.equal(ledgerTotal(v.value.document.body.ledgerBatchDelta.entries), 40 * 25_000 + (39 * 40) / 2);
+  });
+  test("LAN codes: strict parser, SDP rebuilt from validated fields only", () => {
+    const sdp = [
+      "v=0",
+      "a=candidate:3207249848 1 udp 2113937151 adc9b5b3-cd90-49c8-ba7f-a31d620e5751.local 51534 typ host generation 0 network-cost 999",
+      "a=ice-ufrag:K4zx",
+      "a=ice-pwd:NSSw5ZVnVyNhMVHAy7XRO7IJ",
+      "a=fingerprint:sha-256 2A:E2:58:36:38:44:36:54:B5:28:0B:44:29:F1:01:D5:6E:A5:24:E1:5D:6D:CF:33:B1:C6:C3:C9:EA:0F:EF:40",
+      "a=setup:actpass",
+    ].join("\r\n");
+    const code = encodeSignal(compactSdp(sdp, "o"));
+    assert.ok(code.length < 260, `${code.length} chars`);
+    const parsed = parseSignal(code, "o");
+    assert.ok(parsed.ok);
+    const rebuilt = expandSignal(parsed.signal);
+    assert.equal(rebuilt.type, "offer");
+    assert.match(rebuilt.sdp, /a=fingerprint:sha-256 2A:E2:58:/);
+    assert.match(rebuilt.sdp, /typ host\r\n/);
+    assert.equal(parseSignal(code, "a").ok, false, "an offer is not an answer");
+    // Injection attempts and junk are refused before any SDP is built.
+    assert.equal(parseSignal(code.replace("K4zx", "K4zx\r\na=candidate:evil"), "o").ok, false);
+    assert.equal(parseSignal(code.replace(/\|[^|]*$/, "|1 1 udp 1 203.0.113.9 3478 typ relay"), "o").ok, false);
+    assert.equal(parseSignal(code.replace(/\|[^|]*$/, "|"), "o").ok, false);
+    // Only local-network hosts: a public address or a DNS name would leak the device's IP.
+    assert.equal(parseSignal(code.replace(/\|[^|]*$/, "|1 1 udp 1 203.0.113.9 3478 typ host"), "o").ok, false);
+    assert.equal(parseSignal(code.replace(/\|[^|]*$/, "|1 1 udp 1 tracker.example.com 3478 typ host"), "o").ok, false);
+    const lan = parseSignal(code.replace(/\|[^|]*$/, "|7 1 UDP 2122260223 192.168.43.17 50000 typ host"), "o");
+    assert.ok(lan.ok);
+    assert.deepEqual(lan.signal.candidates, ["7 1 udp 2122260223 192.168.43.17 50000 typ host"]);
+    assert.equal(parseSignal("GPLAN1|o|x", "o").ok, false);
+    assert.equal(parseSignal("x".repeat(2000), "o").ok, false);
   });
 });

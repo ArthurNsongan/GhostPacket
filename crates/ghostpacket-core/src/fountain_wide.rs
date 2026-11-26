@@ -9,6 +9,10 @@
 //! with extra degree-1/2 mass to start the peeling cascade. When peeling stalls
 //! with at least K equations, Gauss-Jordan elimination over GF(2) finishes.
 //! Memory is bounded: K ≤ 512, block ≤ 1024 bytes, ≤ 2·K pending equations.
+//!
+//! Chimera Turbo (V3) also sends droplets of the same encoder over sound: a
+//! *bundle* is several whole droplets back to back in one OFDM burst, each
+//! keeping its own CRC32, so the one decoder takes droplets from both channels.
 
 use serde::Serialize;
 
@@ -22,6 +26,11 @@ pub const WIDE_OVERHEAD: usize = WIDE_HEADER_LEN + 4;
 pub const WIDE_MIN_BLOCK: usize = 64;
 pub const WIDE_MAX_BLOCK: usize = 1024;
 pub const WIDE_MAX_K: usize = 512;
+/// Largest bundle: one OFDM frame.
+pub const MAX_BUNDLE_BYTES: usize = 16 * 1024;
+/// Seeds of the acoustic lane start here, disjoint from the matrix seeds.
+pub const SOUND_SEED_BASE: u32 = 0x8000_0000;
+
 /// Densest droplet: keeps XOR work per droplet bounded.
 pub const WIDE_MAX_DEGREE: usize = 48;
 
@@ -153,6 +162,55 @@ impl WideEncoder {
         out.extend_from_slice(&crc.to_be_bytes());
         out
     }
+
+    /// Droplets `first, first+1, …` back to back, as many as fit in `max_bytes`
+    /// (at most `count`, at least one).
+    pub fn bundle(&self, first: u32, count: u32, max_bytes: usize) -> Vec<u8> {
+        let per = self.droplet_len().max(1);
+        let fit = (max_bytes.min(MAX_BUNDLE_BYTES) / per).max(1);
+        let n = (count as usize).clamp(1, fit);
+        let mut out = Vec::with_capacity(n * per);
+        for i in 0..n as u32 {
+            out.extend_from_slice(&self.droplet(first.wrapping_add(i)));
+        }
+        out
+    }
+}
+
+/// Splits a bundle into droplets. The length of each comes from its own header;
+/// nothing is copied, and a bundle larger than one OFDM frame is refused.
+pub fn split_bundle(bytes: &[u8]) -> Result<Vec<&[u8]>, GhostError> {
+    if bytes.is_empty() || bytes.len() > MAX_BUNDLE_BYTES {
+        return Err(GhostError::DropletInvalid);
+    }
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        let head = bytes.get(at..at + 8).ok_or(GhostError::DropletInvalid)?;
+        if head.get(0..2) != Some(&WIDE_MAGIC[..]) {
+            return Err(GhostError::DropletInvalid);
+        }
+        let block = match (head.get(6), head.get(7)) {
+            (Some(&hi), Some(&lo)) => u16::from_be_bytes([hi, lo]) as usize,
+            _ => return Err(GhostError::DropletInvalid),
+        };
+        if !(WIDE_MIN_BLOCK..=WIDE_MAX_BLOCK).contains(&block) {
+            return Err(GhostError::DropletInvalid);
+        }
+        let end = at.checked_add(WIDE_OVERHEAD + block).ok_or(GhostError::DropletInvalid)?;
+        out.push(bytes.get(at..end).ok_or(GhostError::DropletInvalid)?);
+        at = end;
+    }
+    Ok(out)
+}
+
+/// Outcome of a bundle: the last useful step and how many droplets were taken.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleStep {
+    pub accepted: u32,
+    pub rejected: u32,
+    pub step: Option<WideStep>,
 }
 
 /// Block size that fills a transport packet of `capacity` bytes.
@@ -372,6 +430,40 @@ impl WideDecoder {
         })
     }
 
+    /// Ingests every droplet of a bundle (bad ones are counted, not fatal).
+    pub fn ingest_bundle(&mut self, bytes: &[u8]) -> Result<BundleStep, GhostError> {
+        let parts = split_bundle(bytes)?;
+        // A real bundle comes from one encoder: same session, K, block size and length.
+        let head = |p: &[u8]| p.get(2..12).map(<[u8]>::to_vec);
+        let first = parts.first().and_then(|p| head(p)).ok_or(GhostError::DropletInvalid)?;
+        if parts.iter().any(|p| head(p).as_deref() != Some(first.as_slice())) {
+            return Err(GhostError::DropletInvalid);
+        }
+        let mut out = BundleStep { accepted: 0, rejected: 0, step: None };
+        let mut newly: Vec<u32> = Vec::new();
+        let total = parts.len() as u32;
+        for part in parts {
+            match self.ingest(part) {
+                Ok(step) => {
+                    out.accepted += 1;
+                    newly.extend_from_slice(&step.newly_resolved);
+                    out.step = Some(step);
+                }
+                // A foreign bundle counts once towards a session switch, whatever its size.
+                Err(GhostError::DropletSessionMismatch) => {
+                    out.rejected = total.saturating_sub(out.accepted);
+                    break;
+                }
+                Err(_) => out.rejected += 1,
+            }
+        }
+        // Report every block the bundle resolved, not only the last droplet's.
+        if let Some(s) = out.step.as_mut() {
+            s.newly_resolved = newly;
+        }
+        Ok(out)
+    }
+
     fn cascade(&mut self, first: Equation, newly: &mut Vec<u32>) -> u32 {
         let mut queue = vec![(first, 0u32)];
         let mut max_depth = 0;
@@ -548,6 +640,74 @@ mod tests {
         let crc = crc32fast::hash(&h[..end]);
         h[end..].copy_from_slice(&crc.to_be_bytes());
         assert_eq!(WideDecoder::new().ingest(&h).unwrap_err(), GhostError::DropletInvalid);
+    }
+
+    #[test]
+    fn chimera_lanes_feed_one_decoder() {
+        // Light lane: matrices 0..; sound lane: bundles of 2 droplets from SOUND_SEED_BASE.
+        let f = frame(12_000);
+        let enc = WideEncoder::new(&f, 9, 505).unwrap();
+        let mut dec = WideDecoder::new();
+        let (mut light, mut sound) = (0u32, 0u32);
+        let mut done = false;
+        for round in 0..200u32 {
+            // The camera is covered for the first 6 rounds: only sound gets through.
+            if round >= 6 && !crate::channel_sim::is_dropped(3, round as u64, 30.0) {
+                light += 1;
+                done = dec.ingest(&enc.droplet(round)).unwrap().complete;
+            }
+            if !done && round % 3 == 0 {
+                let b = enc.bundle(SOUND_SEED_BASE + sound, 2, MAX_BUNDLE_BYTES);
+                assert_eq!(b.len(), 2 * enc.droplet_len());
+                let out = dec.ingest_bundle(&b).unwrap();
+                assert_eq!((out.accepted, out.rejected), (2, 0));
+                sound += 2;
+                done = out.step.is_some_and(|s| s.complete);
+            }
+            if done {
+                break;
+            }
+        }
+        assert!(done && light > 0 && sound > 0, "light {light}, sound {sound}");
+        assert_eq!(dec.frame().unwrap(), f);
+    }
+
+    #[test]
+    fn hostile_bundles_are_refused() {
+        let enc = WideEncoder::new(&frame(3000), 1, 505).unwrap();
+        let b = enc.bundle(0, 3, MAX_BUNDLE_BYTES);
+        assert_eq!(split_bundle(&b).unwrap().len(), 3);
+        assert_eq!(split_bundle(&b[..b.len() - 1]).unwrap_err(), GhostError::DropletInvalid);
+        assert_eq!(split_bundle(&[]).unwrap_err(), GhostError::DropletInvalid);
+        assert_eq!(split_bundle(&vec![0u8; MAX_BUNDLE_BYTES + 1]).unwrap_err(), GhostError::DropletInvalid);
+        // Bundles never exceed the byte budget, and always hold one droplet.
+        assert_eq!(enc.bundle(0, 100, 1200).len(), 2 * enc.droplet_len());
+        assert_eq!(enc.bundle(0, 0, 10).len(), enc.droplet_len());
+        // A corrupted droplet is counted, the others still count.
+        let mut bad = b.clone();
+        bad[30] ^= 0xff;
+        let out = WideDecoder::new().ingest_bundle(&bad).unwrap();
+        assert_eq!((out.accepted, out.rejected), (2, 1));
+        // Droplets of two encoders in one bundle: not a real bundle.
+        let other = WideEncoder::new(&frame(3000), 2, 505).unwrap();
+        let mut mixed = enc.droplet(0);
+        mixed.extend_from_slice(&other.droplet(0));
+        assert_eq!(WideDecoder::new().ingest_bundle(&mixed).unwrap_err(), GhostError::DropletInvalid);
+    }
+
+    #[test]
+    fn one_foreign_bundle_cannot_reset_a_transfer() {
+        let mine = WideEncoder::new(&frame(5000), 1, 505).unwrap();
+        let foreign = WideEncoder::new(&frame(5000), 7, 505).unwrap();
+        let mut dec = WideDecoder::new();
+        dec.ingest(&mine.droplet(0)).unwrap();
+        // 20 crafted droplets of another session in one burst count as one mismatch.
+        for _ in 0..SESSION_SWITCH_AFTER - 1 {
+            let out = dec.ingest_bundle(&foreign.bundle(SOUND_SEED_BASE, 20, MAX_BUNDLE_BYTES)).unwrap();
+            assert_eq!((out.accepted, out.rejected), (0, 20));
+        }
+        // Still on the first session: its droplets keep counting.
+        assert!(dec.ingest(&mine.droplet(1)).is_ok());
     }
 
     #[test]

@@ -12,6 +12,7 @@ GhostPacket turns a structured document into an **Ed25519-signed binary frame** 
 - **Channel A (sound)**: continuous-phase 4-FSK modem, speaker → microphone.
 - **Channel B (light)**: Luby Transform fountain codes shown as a burst of QR codes, screen → camera.
 - **V3 high-speed modes** for larger frames: an OFDM chord over sound (≈ 4 kbit/s, ≤ 16 KB) and ChromaCrypt color matrices over light (≈ 36 kbit/s at 15 FPS, ≤ 128 KB).
+- **V3 phase 3**: Chimera Turbo (both at once, one decoder: blocking a channel slows the transfer, never restarts it), Ultrasonic Whisper (17.6–19.6 kHz, 400 bit/s, for identity cards ≤ 256 B) and a WebRTC LAN link signaled over the air (same Wi-Fi or hotspot, no server).
 
 The receiver rebuilds the frame, checks CRC32 then Ed25519, and shows either the document or an **explicit rejection**.
 
@@ -24,14 +25,14 @@ The receiver rebuilds the frame, checks CRC32 then Ed25519, and shows either the
 
 ## V3 apps (Skeleton Crew)
 - **GhostClinic** (`/clinic/`): the nurse keeps the ward on the device, signs prescriptions (no patient name in the frame, optional E2EE) and hands them to the pharmacy phone. The pharmacy dispenses once.
-- **GhostTontine** (`/tontine/`): the treasurer runs members and rounds, hands each member a signed receipt and issues single-use aid vouchers, which are paid out once at the pay-out desk.
+- **GhostTontine** (`/tontine/`): the treasurer runs members and rounds, hands each member a signed receipt and issues single-use aid vouchers, which are paid out once at the pay-out desk. At the end of a meeting, one signed round ledger (`LedgerBatchDelta`, up to 64 contributions) is broadcast over the OFDM chord to every member phone at once.
 - Both apps are built only from the skeleton (`ghostpacket-core`, `ghostpacket-sdk`, `ghostpacket-ui`). Each offers a virtual hand-over, so a judge needs one device and no permission.
 - **Kiroween judge**: must see the whole system work in **under 30 seconds, in 1 click, with no microphone or camera**.
 
 ## Non-negotiable product rules
 1. The full demo runs in 1 click in under 30 s thanks to the virtual loopback (no hardware needed).
 2. Any altered data is rejected with a readable error code (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …). A valid signature alone never releases medicine or money: the apps redeem only documents of the expected type, without the DEMO flag, from a pinned issuer, and only once (append-only ledger that fails closed).
-3. No network call at runtime, no secret or API key in the client. The only exception is opt-in: the proof outbox uploads verified frames to a `ghostpacket-verifier` URL that the user (or the integrating app) types in; with no URL set, nothing is sent. The URL must be `https://`, or `http://` on localhost only, and a verifier token is kept in memory, never stored.
+3. No network call at runtime, no secret or API key in the client. The only exception is opt-in: the proof outbox uploads verified frames to a `ghostpacket-verifier` URL that the user (or the integrating app) types in; with no URL set, nothing is sent. The URL must be `https://`, or `http://` on localhost only, and a verifier token is kept in memory, never stored. The WebRTC LAN link is local, not Internet: it opens only when the user pairs two devices, uses no ICE, STUN, TURN or signaling server (host candidates only), and every frame it carries is verified like any other.
 4. Local operations (encode, verify, FFT) answer in under 500 ms (median).
 5. If the microphone or camera is unavailable, the app falls back to the virtual loopback on its own.
 

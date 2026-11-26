@@ -3,7 +3,7 @@
 ## Introduction
 V3 enters the Kiroween 2026 **Skeleton Crew** category: one lean, reusable air-gap skeleton (`crates/ghostpacket-core`, `packages/ghostpacket-sdk`, `packages/ghostpacket-ui`) powering several distinct applications (`apps/portal`, `apps/ghost-clinic`, `apps/ghost-tontine`). It also brings the "Gothic Lantern & Ectoplasm" redesign with a Haunted / Clean Field mode switch. Sources: `UPGRADE_PLAN_V3.md`, `HALLOWEEN_REDESIGN_PLAN.md`.
 
-High-speed transports (GPKT v2, ChromaCrypt, acoustic OFDM, ultrasonic, WebRTC LAN) are specified separately in `.kiro/specs/high-speed-transports/` once their phase starts.
+High-speed transports (GPKT v2, ChromaCrypt, acoustic OFDM, ultrasonic, WebRTC LAN) are specified separately in `.kiro/specs/high-speed-transports/` (with Chimera Turbo and the round ledger).
 
 ## Requirements
 

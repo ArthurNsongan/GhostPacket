@@ -24,5 +24,5 @@
 - [ ] 4. Decisions
   - [x] 4.1 Persistent issuer key for the clinic and the treasurer: identity vault sealed by the core (spec `high-speed-transports`, requirement 4)
   - [ ] 4.2 Dedicated origin (custom domain) instead of the shared `<user>.github.io` origin
-- [x] 5. High-speed transports and GPKT v2: GPKT v2, ChromaCrypt, OFDM, clinic photo, high-speed lab (spec `high-speed-transports`); ultrasonic and WebRTC postponed
+- [x] 5. High-speed transports and GPKT v2: GPKT v2, ChromaCrypt, OFDM, clinic photo, high-speed lab (spec `high-speed-transports`); phase 3: round ledger (GhostTontine), Chimera Turbo, Ultrasonic Whisper, WebRTC LAN, E2EE images
 - [x] 6. Cloud side: `ghostpacket-verifier` is kept instead of Supabase (no account, same Rust verification, already hardened); it accepts GPKT v2 frames

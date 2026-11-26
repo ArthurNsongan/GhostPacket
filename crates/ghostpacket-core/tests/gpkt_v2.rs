@@ -131,3 +131,93 @@ fn vault_keeps_the_same_fingerprint_across_sessions() {
     assert_eq!(Keypair::from_seed(&reopened).unwrap().public_key(), Keypair::from_seed(&SEED).unwrap().public_key());
     assert_eq!(vault::open_seed(&v, b"not the passphrase").unwrap_err(), GhostError::VaultInvalid);
 }
+
+// --- Round ledgers (LedgerBatchDelta, doc type 0x06) ---------------------------
+
+fn ledger(n: usize) -> DocumentDraft {
+    use ghostpacket_core::schema::LedgerEntry;
+    DocumentDraft {
+        doc_id: *b"LDG-0009",
+        timestamp: 1_793_448_000,
+        body: DocumentBody::LedgerBatchDelta {
+            group: "Médina Women's Tontine, Dakar".into(),
+            collector: "Fatou Ndiaye, treasurer".into(),
+            currency: "XOF".into(),
+            cycle: 9,
+            entries: (0..n)
+                .map(|i| LedgerEntry {
+                    member: format!("Member {i:02} (member #{})", i + 17),
+                    amount_minor: 25_000,
+                    receipt_id: *format!("TNT-{i:04}").as_bytes().first_chunk::<8>().unwrap(),
+                })
+                .collect(),
+            note: "Round 9 closed: every contribution in one signed frame.".into(),
+        },
+    }
+}
+
+#[test]
+fn a_round_of_twenty_contributions_ships_in_one_v2_frame() {
+    // Twenty entries do not fit a 512-byte v1 frame…
+    assert!(matches!(encode_frame_with(ledger(20), &SEED, FLAG_FOUNTAIN, None).unwrap_err(), GhostError::PayloadTooLarge { .. }));
+    // …but sign and verify as GPKT v2, well inside one OFDM burst (16 KB).
+    let enc = encode_frame_v2_with(ledger(20), &SEED, FLAG_FOUNTAIN, None).unwrap();
+    assert_eq!(enc.version, VERSION_V2);
+    assert!(enc.frame_len < 16 * 1024, "{} B", enc.frame_len);
+    let v = decode_and_verify_frame(&enc.bytes, &[]).unwrap();
+    assert_eq!(v.doc_type, 6);
+    match v.document.body {
+        DocumentBody::LedgerBatchDelta { entries, cycle, .. } => {
+            assert_eq!(entries.len(), 20);
+            assert_eq!(cycle, 9);
+            assert_eq!(&entries[3].receipt_id, b"TNT-0003");
+        }
+        other => panic!("unexpected body {other:?}"),
+    }
+    // Three entries still fit v1.
+    assert!(encode_frame_with(ledger(3), &SEED, FLAG_FOUNTAIN, None).unwrap().frame_len <= MAX_FRAME_SIZE);
+}
+
+#[test]
+fn malformed_round_ledgers_are_refused() {
+    use ghostpacket_core::schema::MAX_LEDGER_ENTRIES;
+    assert_eq!(encode_frame_v2_with(ledger(0), &SEED, 0, None).unwrap_err(), GhostError::LedgerBatchInvalid { reason: "no entry" });
+    assert_eq!(
+        encode_frame_v2_with(ledger(MAX_LEDGER_ENTRIES + 1), &SEED, 0, None).unwrap_err(),
+        GhostError::TooManyItems { len: MAX_LEDGER_ENTRIES + 1, max: MAX_LEDGER_ENTRIES }
+    );
+    let mut dup = ledger(4);
+    if let DocumentBody::LedgerBatchDelta { entries, .. } = &mut dup.body {
+        entries[2].receipt_id = entries[0].receipt_id;
+    }
+    assert_eq!(encode_frame_v2_with(dup, &SEED, 0, None).unwrap_err(), GhostError::LedgerBatchInvalid { reason: "duplicate receipt id" });
+    // Any payload byte changed (CRC re-computed by the attacker) is rejected.
+    let enc = encode_frame_v2_with(ledger(20), &SEED, 0, None).unwrap();
+    let crc_at = enc.bytes.len() - 68;
+    for at in (10..crc_at).step_by(37) {
+        let mut forged = enc.bytes.clone();
+        forged[at] ^= 0x04;
+        let crc = crc32fast::hash(&forged[..crc_at]);
+        forged[crc_at..crc_at + 4].copy_from_slice(&crc.to_be_bytes());
+        assert!(decode_and_verify_frame(&forged, &[]).is_err(), "byte {at} accepted");
+    }
+}
+
+#[test]
+fn hostile_ledgers_are_refused_while_decoding() {
+    use ghostpacket_core::schema::{GhostDocument, MAX_LEDGER_AMOUNT, MAX_LEDGER_ENTRIES};
+    // Serialized without validation, as an attacker would.
+    let raw = |draft: DocumentDraft| postcard::to_allocvec(&GhostDocument::from_draft(draft, [0x22; 32])).unwrap();
+    assert_eq!(GhostDocument::from_bytes(&raw(ledger(MAX_LEDGER_ENTRIES + 1))).unwrap_err(), GhostError::SchemaDecodeFailed);
+    let mut dup = ledger(5);
+    if let DocumentBody::LedgerBatchDelta { entries, .. } = &mut dup.body {
+        entries[4].receipt_id = entries[1].receipt_id;
+    }
+    assert_eq!(GhostDocument::from_bytes(&raw(dup)).unwrap_err(), GhostError::LedgerBatchInvalid { reason: "duplicate receipt id" });
+    let mut rich = ledger(2);
+    if let DocumentBody::LedgerBatchDelta { entries, .. } = &mut rich.body {
+        entries[0].amount_minor = MAX_LEDGER_AMOUNT + 1;
+    }
+    assert_eq!(GhostDocument::from_bytes(&raw(rich)).unwrap_err(), GhostError::LedgerBatchInvalid { reason: "amount too large" });
+    assert!(GhostDocument::from_bytes(&raw(ledger(MAX_LEDGER_ENTRIES))).is_ok());
+}

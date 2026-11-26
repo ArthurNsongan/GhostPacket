@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { bloodMoon, spectral } from "ghostpacket-sdk/effects";
 import type { LedgerCheck } from "ghostpacket-sdk/ledger";
+import { ledgerTotal } from "ghostpacket-sdk/ledger-batch";
 import { docTitle } from "ghostpacket-sdk/messages";
 import type { DocumentBody, VerifiedFrame } from "ghostpacket-sdk/types";
 import { sfx } from "ghostpacket-sdk/ui-sfx";
@@ -87,6 +88,33 @@ export function DocumentView({ body, docId, timestamp }: { body: DocumentBody; d
         <>
           <Row k="From" v={body.customMessage.sender || "—"} />
           <Row k="Title" v={body.customMessage.title || "—"} />
+        </>
+      )}
+      {"ledgerBatchDelta" in body && (
+        <>
+          <Row k="Group" v={body.ledgerBatchDelta.group} />
+          <Row k="Round" v={`#${body.ledgerBatchDelta.cycle} · ${body.ledgerBatchDelta.entries.length} contribution(s)`} />
+          <Row
+            k="Total"
+            v={<span className="font-mono text-ink">{amount(ledgerTotal(body.ledgerBatchDelta.entries), body.ledgerBatchDelta.currency)}</span>}
+          />
+          <Row
+            k="Entries"
+            v={
+              <ul className="max-h-40 overflow-y-auto font-mono text-[11px]">
+                {body.ledgerBatchDelta.entries.map((e, i) => (
+                  <li key={i} className="flex justify-between gap-2">
+                    <span>
+                      {String.fromCharCode(...e.receiptId).trim()} · {e.member}
+                    </span>
+                    <span className="text-ink">{amount(e.amountMinor, body.ledgerBatchDelta.currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            }
+          />
+          <Row k="Treasurer" v={body.ledgerBatchDelta.collector} />
+          <Row k="Note" v={body.ledgerBatchDelta.note || "—"} />
         </>
       )}
       {"imageDocument" in body && (

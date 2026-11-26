@@ -36,6 +36,20 @@ export class ChromaRx {
         return v1;
     }
     /**
+     * Chimera Turbo: feeds every droplet of a bundle decoded from an OFDM burst.
+     * @param {Uint8Array | number[]} bundle
+     * @returns {any}
+     */
+    ingestBundle(bundle) {
+        const ptr0 = passArray8ToWasm0(bundle, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.chromarx_ingestBundle(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * Feeds a droplet directly (virtual loopback without pixels).
      * @param {Uint8Array | number[]} droplet
      * @returns {any}
@@ -105,6 +119,19 @@ export class ChromaTx {
         wasm.__wbg_chromatx_free(ptr, 0);
     }
     /**
+     * Chimera Turbo sound lane: `count` droplets from `first` back to back,
+     * within one OFDM frame. Use seeds from `limits().chimeraSoundSeedBase`.
+     * @param {number} first
+     * @param {number} count
+     * @returns {Uint8Array}
+     */
+    bundle(first, count) {
+        const ret = wasm.chromatx_bundle(this.__wbg_ptr, first, count);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
      * `GRID × GRID` palette indices (0..8, bits r g b) of the matrix for droplet `seed`.
      * @param {number} seed
      * @returns {Uint8Array}
@@ -117,6 +144,13 @@ export class ChromaTx {
         var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
         return v1;
+    }
+    /**
+     * @returns {number}
+     */
+    dropletLen() {
+        const ret = wasm.chromatx_dropletLen(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * @param {number} seed
@@ -539,7 +573,8 @@ export function fsk_demodulate(samples, sample_rate, mode) {
 }
 
 /**
- * PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms).
+ * PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms),
+ * 2 = ultrasonic whisper (5 ms at 17.6–19.6 kHz, frames ≤ 256 B, ≥ 44.1 kHz).
  * @param {Uint8Array | number[]} frame
  * @param {number} sample_rate
  * @param {number} mode

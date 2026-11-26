@@ -8,7 +8,7 @@ V1 frames (≤ 512 bytes) fit a receipt or a prescription, not a photo. This spe
 
 It also adds a passphrase-sealed identity vault, so that an issuer's fingerprint survives a reload and a receiver's pin stays valid.
 
-Ultrasonic pairing and the WebRTC LAN transport of the plan are out of scope for this iteration (see design.md).
+Phase 3 (requirements 5–9) adds the round ledger of GhostTontine, Chimera Turbo (light and sound feeding one decoder), Ultrasonic Whisper, the WebRTC LAN link signaled over the air, and end-to-end encryption for images in the high-speed lab.
 
 ## Requirements
 
@@ -47,3 +47,36 @@ Ultrasonic pairing and the WebRTC LAN transport of the plan are out of scope for
 2. IF the passphrase is wrong, the vault is altered or its public key is swapped, THEN THE SYSTEM SHALL answer `VAULT_INVALID`.
 3. THE SYSTEM SHALL store only the sealed vault, in the issuer app's own storage namespace, and SHALL show its fingerprint before unlocking.
 4. WHEN an issuer app starts, THE SYSTEM SHALL offer to create, to unlock, or to continue with a session key for the demo.
+
+### Requirement 5 — Round ledger (LedgerBatchDelta)
+**User story:** As a tontine treasurer, I want to broadcast the whole round to every member phone in the room at once, so that each member can check that their contribution is on the signed list.
+#### Acceptance criteria
+1. THE SYSTEM SHALL provide a `LedgerBatchDelta` document (doc type 0x06): group, treasurer, currency, round, 1 to 64 entries (member ≤ 64 B, amount, 8-byte receipt id) and a note.
+2. IF the list is empty, has more than 64 entries or repeats a receipt id, THEN THE SYSTEM SHALL refuse it (`LEDGER_BATCH_INVALID`, `TOO_MANY_ITEMS`).
+3. THE SYSTEM SHALL use a GPKT v1 frame when the ledger fits in 512 bytes and a v2 frame otherwise.
+4. WHEN a member phone verifies a round ledger from a pinned treasurer, THE SYSTEM SHALL keep it once (anti-replay) and SHALL list the receipts of the wallet that the ledger confirms.
+### Requirement 6 — Chimera Turbo
+**User story:** As a judge, I want to cover the camera or jam the sound in the middle of an image transfer and see it finish anyway.
+#### Acceptance criteria
+1. THE SYSTEM SHALL send the same wide-fountain droplets as ChromaCrypt matrices and as OFDM bursts, each burst carrying whole droplets back to back ("bundle", ≤ 16 KB), with sound seeds disjoint from matrix seeds.
+2. THE SYSTEM SHALL feed droplets from both channels into one decoder, counting a corrupt droplet of a bundle without dropping the others.
+3. WHILE one channel is blocked, THE SYSTEM SHALL keep the droplets already received and SHALL complete with the other channel.
+4. THE SYSTEM SHALL bound bundles to 16 KB and refuse truncated or malformed bundles (`DROPLET_INVALID`).
+### Requirement 7 — Ultrasonic Whisper
+**User story:** As a clinician, I want my key to reach the pharmacist's phone without a QR or an audible screech.
+#### Acceptance criteria
+1. THE SYSTEM SHALL modulate frames of at most 256 bytes with the 4-FSK modem moved to 17.6–19.6 kHz (data tones 18.0–19.2 kHz, 5 ms symbols, 400 bit/s), and SHALL refuse sample rates under 44.1 kHz.
+2. THE SYSTEM SHALL keep the energy under 16 kHz at least 30 dB below the signal.
+3. THE SYSTEM SHALL decode at 10 dB SNR at 44.1 and 48 kHz.
+4. THE SYSTEM SHALL carry a signed identity card (label only) and SHALL let the receiver pin the key after the fingerprint is compared.
+### Requirement 8 — WebRTC LAN link
+**User story:** As a field worker on a shared hotspot without Internet, I want to send a large signed file in milliseconds once the devices are paired over the air.
+#### Acceptance criteria
+1. THE SYSTEM SHALL open a WebRTC DataChannel with no ICE server (host candidates only), no signaling server and no network call outside the local network.
+2. THE SYSTEM SHALL compact the offer and the answer to a short code (ICE credentials, DTLS SHA-256 fingerprint, DTLS role, at most 4 host candidates) carried by one QR code or one OFDM burst.
+3. THE SYSTEM SHALL parse a received code field by field against strict patterns and SHALL rebuild the SDP from the validated fields only.
+4. THE SYSTEM SHALL bound each message to one GPKT v2 frame (131 150 bytes) and SHALL verify every frame received in the core.
+### Requirement 9 — Encrypted images in the high-speed lab
+#### Acceptance criteria
+1. THE SYSTEM SHALL let the sender seal an image frame with the optional ChaCha20-Poly1305 encryption on every transport of the lab.
+2. WHEN an encrypted frame arrives without the passphrase, THE SYSTEM SHALL answer `PASSPHRASE_REQUIRED` and SHALL let the receiver enter the shared passphrase to decrypt and verify.

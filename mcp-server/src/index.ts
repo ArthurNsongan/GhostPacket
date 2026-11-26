@@ -38,7 +38,7 @@ server.registerTool(
     title: "Benchmark the acoustic and optical channels",
     description:
       "Runs the GhostPacket WASM core under deterministic impairments. V1 frames: white noise at snr_db on the 4-FSK channel and drop_rate_pct lost QR frames on the fountain channel. " +
-      "With image_kb > 0, also a GPKT v2 image frame over the OFDM chord (noise at snr_db) and over ChromaCrypt color matrices (drop_rate_pct lost). Returns success rates, throughput and latencies.",
+      "With image_kb > 0, also a GPKT v2 image frame over the OFDM chord (noise at snr_db) and over ChromaCrypt color matrices (drop_rate_pct lost), plus an Ultrasonic Whisper identity card (17.6–19.6 kHz) at snr_db. Returns success rates, throughput and latencies.",
     inputSchema: {
       snr_db: z.number().min(-10).max(60).default(10),
       drop_rate_pct: z.number().min(0).max(90).default(30),

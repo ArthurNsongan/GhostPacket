@@ -143,6 +143,8 @@ export interface HighSpeedResult {
     kbpsAt15Fps: number;
     medianScanMs: number;
   };
+  /** Ultrasonic Whisper (17.6–19.6 kHz FSK) on a signed identity card, same SNR. */
+  ultrasonic: { frameLen: number; snrDb: number; iterations: number; decoded: number; successRate: number; burstSeconds: number; bps: number };
 }
 
 const QUIET = 3;
@@ -258,7 +260,32 @@ export function runHighSpeedBenchmark(imageKb: number, snrDb: number, dropRatePc
       kbpsAt15Fps: Number((secs15 ? (frame.length * 8) / secs15 / 1000 : 0).toFixed(1)),
       medianScanMs: Number(median(scanTimes).toFixed(2)),
     },
+    ultrasonic: ultrasonicBench(snrDb, iterations),
   };
+}
+
+function ultrasonicBench(snrDb: number, iterations: number): HighSpeedResult["ultrasonic"] {
+  const g = core();
+  const card = g.encode_document(
+    { docId: Array.from("KEY-0815", (c) => c.charCodeAt(0)), timestamp: 1_793_448_000, body: { customMessage: { sender: "Ndiob health post", title: "Identity card", message: "" } } },
+    BENCH_SEED,
+    0b0010,
+  ).frame as Uint8Array;
+  const pcm = g.fsk_modulate(card, 48_000, 2);
+  const padded = new Float32Array(pcm.length + 9600);
+  padded.set(pcm, 4800);
+  let decoded = 0;
+  for (let i = 0; i < iterations; i++) {
+    try {
+      const r = g.fsk_demodulate(g.inject_awgn(padded, snrDb, 3000 + i), 48_000, 2);
+      g.decode_frame(r.frame as Uint8Array, []);
+      decoded++;
+    } catch {
+      /* failure */
+    }
+  }
+  const secs = g.fsk_burst_seconds(card.length, 2);
+  return { frameLen: card.length, snrDb, iterations, decoded, successRate: decoded / iterations, burstSeconds: Number(secs.toFixed(2)), bps: Math.round((card.length * 8) / secs) };
 }
 
 function median(values: number[]): number {

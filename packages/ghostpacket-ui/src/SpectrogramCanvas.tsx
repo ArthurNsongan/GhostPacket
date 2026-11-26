@@ -9,16 +9,44 @@ export interface SignalSink {
   clear(): void;
 }
 
-const F_MIN = 900;
-const F_MAX = 3500;
-const MARKERS = [
-  { hz: 1200, label: "1200 sync−", sync: true },
-  { hz: 1600, label: "1600 · 00", sync: false },
-  { hz: 2000, label: "2000 · 01", sync: false },
-  { hz: 2400, label: "2400 · 11", sync: false },
-  { hz: 2800, label: "2800 · 10", sync: false },
-  { hz: 3200, label: "3200 sync+", sync: true },
-];
+export type SpectrumBand = "fsk" | "ofdm" | "ultrasonic";
+
+/** Displayed range and carrier markers of each modem. */
+const BANDS: Record<SpectrumBand, { min: number; max: number; markers: { hz: number; label: string; sync: boolean }[] }> = {
+  fsk: {
+    min: 900,
+    max: 3500,
+    markers: [
+      { hz: 1200, label: "1200 sync−", sync: true },
+      { hz: 1600, label: "1600 · 00", sync: false },
+      { hz: 2000, label: "2000 · 01", sync: false },
+      { hz: 2400, label: "2400 · 11", sync: false },
+      { hz: 2800, label: "2800 · 10", sync: false },
+      { hz: 3200, label: "3200 sync+", sync: true },
+    ],
+  },
+  ofdm: {
+    min: 800,
+    max: 7800,
+    markers: [
+      { hz: 1200, label: "1.2 kHz chirp", sync: true },
+      { hz: 4200, label: "32 carriers", sync: false },
+      { hz: 7200, label: "7.2 kHz", sync: true },
+    ],
+  },
+  ultrasonic: {
+    min: 17_000,
+    max: 20_200,
+    markers: [
+      { hz: 17_600, label: "17.6 sync−", sync: true },
+      { hz: 18_000, label: "18.0 · 00", sync: false },
+      { hz: 18_400, label: "18.4 · 01", sync: false },
+      { hz: 18_800, label: "18.8 · 11", sync: false },
+      { hz: 19_200, label: "19.2 · 10", sync: false },
+      { hz: 19_600, label: "19.6 sync+", sync: true },
+    ],
+  },
+};
 
 /**
  * dB (−62..0) → phosphor palette RGB. A modem tone peaks near −3 dB; white
@@ -53,12 +81,15 @@ export default function SpectrogramCanvas({
   ref,
   syncLocked,
   caption,
+  band = "fsk",
 }: {
   core: Core | null;
   ref?: Ref<SignalSink>;
   syncLocked: boolean;
   caption?: string;
+  band?: SpectrumBand;
 }) {
+  const { min: F_MIN, max: F_MAX, markers: MARKERS } = BANDS[band];
   const canvas = useRef<HTMLCanvasElement>(null);
   const analyzer = useRef<SpectrumAnalyzer | null>(null);
 
@@ -73,6 +104,7 @@ export default function SpectrogramCanvas({
   }, [core]);
 
   useImperativeHandle(ref, () => ({
+    // F_MIN/F_MAX come from the band prop: the handle is rebuilt when it changes.
     push(window, sampleRate) {
       const c = canvas.current;
       const a = analyzer.current;
@@ -107,7 +139,7 @@ export default function SpectrogramCanvas({
         ctx.fillRect(0, 0, c.width, c.height);
       }
     },
-  }));
+  }), [F_MIN, F_MAX]);
 
   useEffect(() => {
     const c = canvas.current;
@@ -188,6 +220,7 @@ export function Oscilloscope({ ref }: { ref?: Ref<SignalSink> }) {
   };
 
   useImperativeHandle(ref, () => ({
+    // F_MIN/F_MAX come from the band prop: the handle is rebuilt when it changes.
     push(window) {
       draw(window);
     },

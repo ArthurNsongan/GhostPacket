@@ -74,6 +74,10 @@ struct Limits {
     ofdm_max_frame: usize,
     vault_len: usize,
     min_vault_passphrase_bytes: usize,
+    ultrasonic_max_frame: usize,
+    ultrasonic_min_sample_rate: u32,
+    max_ledger_entries: usize,
+    chimera_sound_seed_base: u32,
 }
 
 /// Crate version, for the UI footer and the MCP inspector.
@@ -107,6 +111,10 @@ pub fn limits() -> Result<JsValue, JsValue> {
         ofdm_max_frame: ofdm::OFDM_MAX_FRAME,
         vault_len: vault::VAULT_LEN,
         min_vault_passphrase_bytes: vault::MIN_VAULT_PASSPHRASE_BYTES,
+        ultrasonic_max_frame: fsk::ULTRASONIC_MAX_FRAME,
+        ultrasonic_min_sample_rate: fsk::ULTRASONIC_MIN_SAMPLE_RATE,
+        max_ledger_entries: schema::MAX_LEDGER_ENTRIES,
+        chimera_sound_seed_base: fountain_wide::SOUND_SEED_BASE,
     })
 }
 
@@ -208,7 +216,8 @@ pub fn inspect_frame(frame: &[u8], passphrase: Option<String>) -> Result<JsValue
     to_js(&protocol::inspect_frame_with(frame, passphrase.as_deref().map(str::as_bytes)))
 }
 
-/// PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms).
+/// PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms),
+/// 2 = ultrasonic whisper (5 ms at 17.6–19.6 kHz, frames ≤ 256 B, ≥ 44.1 kHz).
 #[wasm_bindgen]
 pub fn fsk_modulate(frame: &[u8], sample_rate: u32, mode: u8) -> Result<Vec<f32>, JsValue> {
     let mode = FskMode::from_code(mode).map_err(js_err)?;
@@ -423,6 +432,17 @@ impl ChromaTx {
     pub fn droplet(&self, seed: u32) -> Vec<u8> {
         self.inner.droplet(seed)
     }
+
+    /// Chimera Turbo sound lane: `count` droplets from `first` back to back,
+    /// within one OFDM frame. Use seeds from `limits().chimeraSoundSeedBase`.
+    pub fn bundle(&self, first: u32, count: u32) -> Vec<u8> {
+        self.inner.bundle(first, count, ofdm::OFDM_MAX_FRAME)
+    }
+
+    #[wasm_bindgen(js_name = dropletLen)]
+    pub fn droplet_len(&self) -> usize {
+        self.inner.droplet_len()
+    }
 }
 
 /// Receiver: camera image → matrix → droplet → wide fountain.
@@ -470,6 +490,12 @@ impl ChromaRx {
     /// Feeds a droplet directly (virtual loopback without pixels).
     pub fn ingest(&mut self, droplet: &[u8]) -> Result<JsValue, JsValue> {
         to_js(&self.inner.ingest(droplet).map_err(js_err)?)
+    }
+
+    /// Chimera Turbo: feeds every droplet of a bundle decoded from an OFDM burst.
+    #[wasm_bindgen(js_name = ingestBundle)]
+    pub fn ingest_bundle(&mut self, bundle: &[u8]) -> Result<JsValue, JsValue> {
+        to_js(&self.inner.ingest_bundle(bundle).map_err(js_err)?)
     }
 
     pub fn frame(&self) -> Result<Vec<u8>, JsValue> {

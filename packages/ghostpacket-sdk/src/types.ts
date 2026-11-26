@@ -64,7 +64,25 @@ export type DocumentBody =
         height: number;
         image: Uint8Array;
       };
+    }
+  | {
+      /** A whole savings-group round (1..=64 contributions) in one frame; GPKT v2 above ~4 entries. */
+      ledgerBatchDelta: {
+        group: string;
+        collector: string;
+        currency: string;
+        cycle: number;
+        entries: LedgerBatchEntry[];
+        note: string;
+      };
     };
+
+export interface LedgerBatchEntry {
+  member: string;
+  amountMinor: number;
+  /** 8 bytes: doc id of the member's individual receipt. */
+  receiptId: number[];
+}
 
 export interface DocumentDraft {
   /** 8 bytes. */
@@ -181,6 +199,10 @@ export interface Limits {
   ofdmMaxFrame: number;
   vaultLen: number;
   minVaultPassphraseBytes: number;
+  ultrasonicMaxFrame: number;
+  ultrasonicMinSampleRate: number;
+  maxLedgerEntries: number;
+  chimeraSoundSeedBase: number;
 }
 
 export interface WideStep {
@@ -196,6 +218,13 @@ export interface WideStep {
   dropletsReceived: number;
   totalLen: number;
   complete: boolean;
+}
+
+/** Chimera Turbo: droplets of one OFDM bundle fed to the wide fountain. */
+export interface BundleStep {
+  accepted: number;
+  rejected: number;
+  step?: WideStep | null;
 }
 
 export interface ChromaScan {
@@ -231,8 +260,9 @@ export function isGhostError(e: unknown): e is GhostError {
   return typeof e === "object" && e !== null && "code" in e && "message" in e;
 }
 
-export type FskMode = "robust" | "fast";
-export const FSK_MODE_CODE: Record<FskMode, number> = { robust: 0, fast: 1 };
+/** "ultrasonic" = Ultrasonic Whisper: 17.6–19.6 kHz, 400 bit/s, frames ≤ 256 B, ≥ 44.1 kHz. */
+export type FskMode = "robust" | "fast" | "ultrasonic";
+export const FSK_MODE_CODE: Record<FskMode, number> = { robust: 0, fast: 1, ultrasonic: 2 };
 /** Acoustic modems: 4-FSK (robust / fast, frames ≤ 512 B) or OFDM (≈ 4 kbit/s, frames ≤ 16 KB). */
 export type AcousticMode = FskMode | "ofdm";
 
@@ -243,4 +273,4 @@ export const FLAG_DEMO = 0b1000;
 export const FLAG_ENCRYPTED = 0b1_0000;
 
 /** "chroma" = ChromaCrypt color matrix (light), "ofdm" = acoustic OFDM (sound). */
-export type Channel = "sound" | "light" | "file" | "tamper" | "chroma" | "ofdm";
+export type Channel = "sound" | "light" | "file" | "tamper" | "chroma" | "ofdm" | "ultrasonic" | "chimera" | "lan";

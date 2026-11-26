@@ -9,16 +9,19 @@ inclusion: always
 - Target: `wasm32-unknown-unknown`, built with `wasm-pack build --target web`.
 - Allowed dependencies (pure Rust, WASM-friendly): `wasm-bindgen`, `js-sys`, `serde`, `serde-wasm-bindgen`, `postcard`, `lz4_flex`, `crc32fast`, `ed25519-dalek`, `sha2`, `rustfft`, and for optional end-to-end encryption `chacha20poly1305`, `pbkdf2`, `zeroize` (all with default features off: no `getrandom`).
 - No source of randomness in the crate: Ed25519 seeds and noise seeds come from the caller (`crypto.getRandomValues` on the web, constants in tests).
-- Tests: `cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml` (79: protocol v1/v2 vectors, FSK and OFDM channel fuzz, fountain fuzz, ChromaCrypt, wide fountain, vault).
+- Tests: `cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml` (91: protocol v1/v2 vectors incl. round ledgers, FSK (audible and ultrasonic) and OFDM channel fuzz, fountain fuzz, ChromaCrypt, wide fountain and Chimera bundles, vault).
 
 ## Transports (spec `.kiro/specs/high-speed-transports/`)
 | Channel | Module | Frames | Rate |
 |---|---|---|---|
 | 4-FSK robust / fast | `fsk.rs` | v1 ≤ 512 B | 133 / 333 bit/s |
+| Ultrasonic Whisper (4-FSK at 17.6–19.6 kHz, ≥ 44.1 kHz) | `fsk.rs` | ≤ 256 B | 400 bit/s |
 | OFDM chord (32 DQPSK subcarriers) | `ofdm.rs` | ≤ 16 KB | ≈ 4 kbit/s |
 | Fountain QR (16-byte blocks) | `fountain.rs` | v1 ≤ 512 B | ≈ 1 frame / 4 s |
 | ChromaCrypt 44×44 × 8 colors + wide fountain | `chroma.rs`, `fountain_wide.rs` | v1 and v2 ≤ 131 150 B | ≈ 36 kbit/s at 15 FPS |
-- GPKT v2 (`protocol.rs`, version 0x02, u32 length) carries `ImageDocument` (≤ 64 KB WebP / JPEG / PNG made by the browser encoder, `image-codec.ts`).
+| Chimera Turbo (matrices + OFDM bundles of droplets, one decoder) | `fountain_wide.rs` + SDK `chimera-turbo.ts` | ≤ 131 150 B | light rate + ≈ 0.7 droplet/s by sound |
+| WebRTC LAN (DataChannel, QR / OFDM signaling, no server) | SDK `lan-link.ts` | ≤ 131 150 B per message | local network (10.6 KB in ≈ 10 ms) |
+- GPKT v2 (`protocol.rs`, version 0x02, u32 length) carries `ImageDocument` (≤ 64 KB WebP / JPEG / PNG made by the browser encoder, `image-codec.ts`) and large `LedgerBatchDelta` round ledgers (0x06, ≤ 64 entries; `sealCompact` keeps v1 when the ledger fits).
 
 ## Server verifier (`crates/ghostpacket-verifier`)
 - Native binary + library that depends on `ghostpacket-core` by path, so the server runs exactly the same verification code as the browser.
@@ -31,7 +34,7 @@ inclusion: always
 ## Monorepo
 - npm workspaces from the root `package.json` (`packages/*`, `apps/*`), one root `package-lock.json`, Node ≥ 23.6. `mcp-server/` keeps its own lockfile.
 - Root scripts: `npm run wasm`, `npm run build:portal`, `npm run build:pages` (all apps merged into `pages-out/` under `/`, `/clinic/`, `/tontine/`), `npm run dev:portal|dev:clinic|dev:tontine`, `npm run build:sdk`, `npm run typecheck` (every workspace), `npm run test:sdk`, `npm run test:sdk:browser`, `npm run audit`.
-- E2E (headless Chrome, versioned in `scripts/e2e/`): `node scripts/build-pages.mjs --base /GhostPacket`, then `node scripts/e2e/apps.mjs` (28 checks: vault identity, clinic, ChromaCrypt photo, tontine, OFDM image) and `node scripts/e2e/portal.mjs` (30 checks, fake mic and camera from `fake-media.mjs`). `GP_BASE_URL=<deployed URL>` runs both against the live site.
+- E2E (headless Chrome, versioned in `scripts/e2e/`): `node scripts/build-pages.mjs --base /GhostPacket`, then `node scripts/e2e/apps.mjs` (36 checks: vault identity, clinic, ChromaCrypt photo, tontine, round ledger over OFDM, OFDM image, E2EE image over Chimera Turbo, WebRTC LAN, Ultrasonic Whisper; `GP_ONLY=clinic,tontine,portal` runs a subset) and `node scripts/e2e/portal.mjs` (30 checks, fake mic and camera from `fake-media.mjs`). `GP_BASE_URL=<deployed URL>` runs both against the live site.
 
 ## SDK package (`packages/ghostpacket-sdk`)
 - `ghostpacket-sdk`: the TypeScript source is consumed directly by the apps (`exports`: `ghostpacket-sdk/<module>` → `src/<module>.ts`).
@@ -66,7 +69,7 @@ inclusion: always
 | Verify | < 15 ms |
 | Encrypted encode / decrypt + verify (PBKDF2 40k) | < 500 ms (≈ 90 ms measured in WASM) |
 | 1024-point FFT | < 5 ms |
-| Gzipped `.wasm` | < 350 KB (280 KB measured) |
+| Gzipped `.wasm` | < 350 KB (285 KB measured) |
 | Identity vault unlock (PBKDF2 210k) | < 1 s (once per session) |
 | ChromaCrypt matrix scan | < 5 ms (≈ 0.8 ms measured for 312 px) |
 

@@ -18,6 +18,14 @@ pub const DOC_TYPE_PRESCRIPTION: u8 = 0x02;
 pub const DOC_TYPE_VOUCHER: u8 = 0x03;
 pub const DOC_TYPE_MESSAGE: u8 = 0x04;
 pub const DOC_TYPE_IMAGE: u8 = 0x05;
+pub const DOC_TYPE_LEDGER_BATCH: u8 = 0x06;
+
+/// A round ledger carries 1..=64 contributions: up to ~5.3 KB, so it needs GPKT
+/// v2 above ~4 entries and still fits one OFDM burst (≤ 16 KB).
+pub const MAX_LEDGER_ENTRIES: usize = 64;
+/// Largest amount per entry: 64 entries still sum below 2^53, so JavaScript
+/// numbers hold every amount and every total exactly.
+pub const MAX_LEDGER_AMOUNT: u64 = (1u64 << 53) / MAX_LEDGER_ENTRIES as u64;
 
 /// Image documents travel in GPKT v2 frames only (payload ≤ 128 KB).
 pub const MAX_IMAGE_BYTES: usize = 64 * 1024;
@@ -48,6 +56,16 @@ pub struct VoucherItem {
     pub label: String,
     pub quantity: u32,
     pub unit: String,
+}
+
+/// One contribution inside a round ledger. `receipt_id` is the doc id of the
+/// individual receipt handed to the member, so a phone can match its receipts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LedgerEntry {
+    pub member: String,
+    pub amount_minor: u64,
+    pub receipt_id: [u8; 8],
 }
 
 /// Document body. The enum discriminant is the wire `doc_type`.
@@ -105,6 +123,45 @@ pub enum DocumentBody {
         #[serde(with = "bytes")]
         image: Vec<u8>,
     },
+    /// A whole round of a savings group in one signed frame (V3): broadcast to
+    /// every member phone at once over the OFDM chord.
+    #[serde(rename_all = "camelCase")]
+    LedgerBatchDelta {
+        group: String,
+        collector: String,
+        currency: String,
+        cycle: u16,
+        #[serde(deserialize_with = "bounded_entries")]
+        entries: Vec<LedgerEntry>,
+        note: String,
+    },
+}
+
+/// Deserializes at most `MAX_LEDGER_ENTRIES` entries: a hostile length cannot
+/// make the decoder build a larger list before `validate` runs.
+fn bounded_entries<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<LedgerEntry>, D::Error> {
+    struct Entries;
+
+    impl<'de> serde::de::Visitor<'de> for Entries {
+        type Value = Vec<LedgerEntry>;
+
+        fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            f.write_str("at most 64 ledger entries")
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<LedgerEntry>, A::Error> {
+            let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(MAX_LEDGER_ENTRIES));
+            while let Some(e) = seq.next_element::<LedgerEntry>()? {
+                if out.len() >= MAX_LEDGER_ENTRIES {
+                    return Err(serde::de::Error::custom("too many ledger entries"));
+                }
+                out.push(e);
+            }
+            Ok(out)
+        }
+    }
+
+    d.deserialize_seq(Entries)
 }
 
 /// (De)serializes `Vec<u8>` as a byte string: a `Uint8Array` in JavaScript, a
@@ -176,6 +233,7 @@ impl DocumentBody {
             DocumentBody::EmergencyVoucher { .. } => DOC_TYPE_VOUCHER,
             DocumentBody::CustomMessage { .. } => DOC_TYPE_MESSAGE,
             DocumentBody::ImageDocument { .. } => DOC_TYPE_IMAGE,
+            DocumentBody::LedgerBatchDelta { .. } => DOC_TYPE_LEDGER_BATCH,
         }
     }
 }
@@ -296,6 +354,38 @@ impl GhostDocument {
                 }
                 if *width == 0 || *height == 0 || *width > MAX_IMAGE_SIDE || *height > MAX_IMAGE_SIDE || !image_format_ok(*mime, image) {
                     return Err(GhostError::ImageFormatInvalid);
+                }
+            }
+            DocumentBody::LedgerBatchDelta {
+                group,
+                collector,
+                currency,
+                entries,
+                note,
+                ..
+            } => {
+                check_field("group", group, MAX_FIELD_BYTES)?;
+                check_field("collector", collector, MAX_FIELD_BYTES)?;
+                check_field("currency", currency, 8)?;
+                check_field("note", note, MAX_NOTE_BYTES)?;
+                if entries.is_empty() {
+                    return Err(GhostError::LedgerBatchInvalid { reason: "no entry" });
+                }
+                if entries.len() > MAX_LEDGER_ENTRIES {
+                    return Err(GhostError::TooManyItems {
+                        len: entries.len(),
+                        max: MAX_LEDGER_ENTRIES,
+                    });
+                }
+                for (i, e) in entries.iter().enumerate() {
+                    check_field("member", &e.member, MAX_FIELD_BYTES)?;
+                    if e.amount_minor > MAX_LEDGER_AMOUNT {
+                        return Err(GhostError::LedgerBatchInvalid { reason: "amount too large" });
+                    }
+                    // A receipt counted twice would inflate the pot.
+                    if entries.iter().take(i).any(|p| p.receipt_id == e.receipt_id) {
+                        return Err(GhostError::LedgerBatchInvalid { reason: "duplicate receipt id" });
+                    }
                 }
             }
         }

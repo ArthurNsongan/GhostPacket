@@ -134,7 +134,7 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
   let jamApplied = false;
   let lastProbe = 0;
   const probeEvery = 250;
-  const preambleSamples = opts.mode === "ofdm" ? sampleRate * 0.06 : sampleRate * (opts.mode === "fast" ? 0.006 : 0.015) * 45;
+  const preambleSamples = opts.mode === "ofdm" ? sampleRate * 0.06 : sampleRate * symbolSeconds(opts.mode) * 45;
 
   await new Promise<void>((resolve, reject) => {
     const onAbort = () => {
@@ -171,6 +171,11 @@ export async function runAcousticLoopback(core: Core, frame: Uint8Array, opts: L
 
   const result = demodulate(core, rx, sampleRate, opts.mode);
   return { result, sampleRate, burstSamples: pcm.length, elapsedMs: performance.now() - t0, audioPlayed };
+}
+
+/** 4-FSK symbol length per mode (same values as fsk.rs). */
+function symbolSeconds(mode: AcousticMode): number {
+  return mode === "fast" ? 0.006 : mode === "ultrasonic" ? 0.005 : 0.015;
 }
 
 function wallClock(sampleRate: number): () => number {
@@ -265,6 +270,8 @@ export class MicReceiver {
   private accCount = 0;
   private releaseModem: (() => void) | null = null;
   private generation = 0;
+  /** Absolute sample index before which audio was already decoded (streams of bursts). */
+  private floor = 0;
 
   constructor(
     private readonly core: Core,
@@ -291,8 +298,11 @@ export class MicReceiver {
     const ctx = await audioContext();
     // Above ~50 kHz (88.2/96/192 kHz interfaces) average groups of samples down
     // to ≤ 48 kHz: the modem tops out at 3.2 kHz, and MAX_SAMPLES counts samples.
-    this.decimation = ctx.sampleRate > 50_000 ? Math.ceil(ctx.sampleRate / 48_000) : 1;
+    // Ultrasonic Whisper needs ≥ 44.1 kHz after decimation (its top tone is 19.6 kHz).
+    const minRate = this.mode === "ultrasonic" ? this.core.limits.ultrasonicMinSampleRate : 0;
+    this.decimation = ctx.sampleRate > 50_000 ? Math.max(1, minRate ? Math.floor(ctx.sampleRate / minRate) : Math.ceil(ctx.sampleRate / 48_000)) : 1;
     this.sampleRate = ctx.sampleRate / this.decimation;
+    if (this.sampleRate < minRate) throw new Error(`Ultrasonic Whisper needs a 44.1 or 48 kHz audio path; this device runs at ${ctx.sampleRate} Hz`);
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
     });
@@ -303,10 +313,11 @@ export class MicReceiver {
     }
     this.stream = stream;
     this.source = ctx.createMediaStreamSource(this.stream);
-    // OFDM frames reach 16 KB (≈ 33 s of audio); FSK frames stay ≤ 512 B.
-    const seconds = this.mode === "fast" ? 14 : this.mode === "ofdm" ? 40 : 38;
+    // OFDM frames reach 16 KB (≈ 33 s of audio); FSK frames stay ≤ 512 B; whispers ≤ 256 B (≈ 6 s).
+    const seconds = this.mode === "fast" ? 14 : this.mode === "ofdm" ? 40 : this.mode === "ultrasonic" ? 10 : 38;
     this.ring = new Float32Array(Math.min(Math.ceil(seconds * this.sampleRate), this.core.limits.maxSamples));
     this.written = 0;
+    this.floor = 0;
 
     const push = (chunk: Float32Array) => this.push(chunk);
     try {
@@ -333,7 +344,7 @@ export class MicReceiver {
     this.timer = window.setInterval(() => this.probe(), 700);
     const draw = () => {
       this.cb.onTick?.({
-        window: this.latest(FFT_SIZE),
+        window: this.latest(FFT_SIZE, false),
         cursor: this.written,
         total: this.ring.length,
         sampleRate: this.sampleRate,
@@ -396,9 +407,9 @@ export class MicReceiver {
   }
 
   /** Last `size` samples in chronological order. */
-  private latest(size: number): Float32Array {
+  private latest(size: number, sinceFloor = true): Float32Array {
     const n = this.ring.length;
-    const count = Math.min(size, this.written, n);
+    const count = Math.min(size, this.written, n, sinceFloor ? Math.max(0, this.written - this.floor) : Infinity);
     const out = new Float32Array(count);
     const start = this.written - count;
     for (let i = 0; i < count; i++) out[i] = this.ring[(start + i) % n] ?? 0;
@@ -414,6 +425,8 @@ export class MicReceiver {
     const buf = this.latest(this.ring.length);
     const res = demodulate(this.core, buf, this.sampleRate, this.mode);
     if (res.ok) {
+      // A decoded burst is consumed, so the next burst of a stream (Chimera Turbo) is found next.
+      this.floor = Math.max(this.floor, this.written - buf.length + res.value.endOffset);
       const frame = res.value.frame;
       let hex = "";
       for (const b of frame) hex += b.toString(16).padStart(2, "0");

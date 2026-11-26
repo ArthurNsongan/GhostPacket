@@ -333,5 +333,9 @@ pub fn describe(body: &DocumentBody) -> String {
         DocumentBody::EmergencyVoucher { program, items, .. } => format!("aid voucher · {program} · {} item(s)", items.len()),
         DocumentBody::CustomMessage { sender, title, .. } => format!("message · {sender} · {title}"),
         DocumentBody::ImageDocument { title, image, width, height, .. } => format!("image · {title} · {width}×{height} · {} B", image.len()),
+        DocumentBody::LedgerBatchDelta { group, cycle, entries, currency, .. } => {
+            let total = entries.iter().fold(0u64, |s, e| s.saturating_add(e.amount_minor));
+            format!("round ledger · {group} · round {cycle} · {} contribution(s) · {total} {currency}", entries.len())
+        }
     }
 }

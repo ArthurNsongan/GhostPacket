@@ -10,6 +10,10 @@ export class ChromaRx {
     decodedMap(): Uint8Array;
     frame(): Uint8Array;
     /**
+     * Chimera Turbo: feeds every droplet of a bundle decoded from an OFDM burst.
+     */
+    ingestBundle(bundle: Uint8Array | number[]): any;
+    /**
      * Feeds a droplet directly (virtual loopback without pixels).
      */
     ingest(droplet: Uint8Array | number[]): any;
@@ -33,9 +37,15 @@ export class ChromaTx {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Chimera Turbo sound lane: `count` droplets from `first` back to back,
+     * within one OFDM frame. Use seeds from `limits().chimeraSoundSeedBase`.
+     */
+    bundle(first: number, count: number): Uint8Array;
+    /**
      * `GRID × GRID` palette indices (0..8, bits r g b) of the matrix for droplet `seed`.
      */
     cells(seed: number): Uint8Array;
+    dropletLen(): number;
     droplet(seed: number): Uint8Array;
     k(): number;
     constructor(frame: Uint8Array | number[], session: number);
@@ -130,7 +140,8 @@ export function fsk_burst_seconds(frame_len: number, mode: number): number;
 export function fsk_demodulate(samples: Float32Array | number[], sample_rate: number, mode: number): any;
 
 /**
- * PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms).
+ * PCM burst for `frame`. `mode`: 0 = robust (15 ms), 1 = fast (6 ms),
+ * 2 = ultrasonic whisper (5 ms at 17.6–19.6 kHz, frames ≤ 256 B, ≥ 44.1 kHz).
  */
 export function fsk_modulate(frame: Uint8Array | number[], sample_rate: number, mode: number): Float32Array;
 
@@ -199,12 +210,15 @@ export interface InitOutput {
     readonly chromarx_decodedMap: (a: number) => [number, number];
     readonly chromarx_frame: (a: number) => [number, number, number, number];
     readonly chromarx_ingest: (a: number, b: number, c: number) => [number, number, number];
+    readonly chromarx_ingestBundle: (a: number, b: number, c: number) => [number, number, number];
     readonly chromarx_new: () => number;
     readonly chromarx_partial: (a: number) => [number, number];
     readonly chromarx_reset: (a: number) => void;
     readonly chromarx_scan: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly chromatx_bundle: (a: number, b: number, c: number) => [number, number];
     readonly chromatx_cells: (a: number, b: number) => [number, number, number, number];
     readonly chromatx_droplet: (a: number, b: number) => [number, number];
+    readonly chromatx_dropletLen: (a: number) => number;
     readonly chromatx_k: (a: number) => number;
     readonly chromatx_new: (a: number, b: number, c: number) => [number, number, number];
     readonly core_version: () => [number, number];

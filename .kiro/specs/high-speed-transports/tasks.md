@@ -23,7 +23,14 @@
   - [x] 5.2 Verifier accepts v2 frames, summarizes images; MCP inspector and benchmark V3
   - [x] 5.3 E2E: `scripts/e2e/apps.mjs` (vault, ChromaCrypt photo, OFDM image), `scripts/e2e/portal.mjs` versioned
   - _Requirements: all_
-- [ ] 6. Later
-  - [ ] 6.1 Ultrasonic pairing (needs field measurements of the 17–20 kHz band)
-  - [ ] 6.2 WebRTC LAN for multi-MB transfers (product rule 3 decision)
-  - [ ] 6.3 Chimera Turbo: wide droplets over OFDM, one decoder for both channels
+- [x] 6. Phase 3
+  - [x] 6.1 LedgerBatchDelta (0x06) with bounds and duplicate check; sealCompact; GhostTontine round ledger broadcast over the OFDM chord, receipts cross-checked
+  - [x] 6.2 Chimera Turbo: droplet bundles over OFDM (undle, split_bundle, ingest_bundle), virtual lab with live sabotage, field emitter and receiver; MicReceiver consumes decoded bursts
+  - [x] 6.3 Ultrasonic Whisper: FskMode::Ultrasonic, identity card, WhisperIdentity (portal, tontine); tests in noise at 44.1 / 48 kHz and spectral leakage
+  - [x] 6.4 WebRTC LAN: lan-link.ts (compact codes, strict parser, SDP rebuild), LanLinkPanel (virtual QR loopback, field QR / OFDM answer)
+  - [x] 6.5 E2EE for images in HighSpeedLab, receiver passphrase unlock
+  - [x] 6.6 Tests: Rust (bundles, ledger, ultrasonic), SDK Node (LAN parser, bundles, ledger, ultrasonic), E2E (ledger broadcast, Chimera Turbo, E2EE unlock, LAN, whisper); MCP benchmark reports ultrasonic
+  - _Requirements: 5–9_
+- [ ] 7. Later
+  - [ ] 7.1 Field measurements: ChromaCrypt with a phone camera, OFDM and ultrasonic between real speakers and microphones
+  - [ ] 7.2 IndexedDB storage and X25519 key agreement

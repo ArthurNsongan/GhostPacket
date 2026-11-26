@@ -11,6 +11,7 @@ import {
   type DropletStep,
   type EncodedFrame,
   type FrameInspection,
+  type BundleStep,
   type FskDecodeResult,
   type FskMode,
   type GhostError,
@@ -286,6 +287,11 @@ export class ChromaReceiver {
 
   ingest(droplet: Uint8Array): Result<WideStep> {
     return attempt("chroma_ingest", () => this.inner.ingest(droplet) as WideStep);
+  }
+
+  /** Chimera Turbo: every droplet of a bundle decoded from an OFDM burst. */
+  ingestBundle(bundle: Uint8Array): Result<BundleStep> {
+    return attempt("chroma_ingest_bundle", () => this.inner.ingestBundle(bundle) as BundleStep);
   }
 
   frame(): Result<Uint8Array> {

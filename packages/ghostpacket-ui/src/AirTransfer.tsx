@@ -9,17 +9,18 @@
 // All DSP and decoding run in WASM through the SDK; these only move pixels and samples.
 import { useEffect, useRef, useState } from "react";
 
-import { MicReceiver, playBurst, type MicStatus } from "ghostpacket-sdk/audio-engine";
+import { MicReceiver, playBurst, runAcousticLoopback, type MicStatus } from "ghostpacket-sdk/audio-engine";
+import { chimeraBroadcast, isBundle } from "ghostpacket-sdk/chimera-turbo";
 import { chromaBroadcast, ChromaScanner, runChromaLoopback } from "ghostpacket-sdk/chroma-engine";
 import { emitLevel, spectral } from "ghostpacket-sdk/effects";
 import { broadcast, CameraScanner, runOpticalLoopback } from "ghostpacket-sdk/optical-engine";
-import type { AcousticMode, Channel, FskMode } from "ghostpacket-sdk/types";
+import type { AcousticMode, Channel } from "ghostpacket-sdk/types";
 import { sfx } from "ghostpacket-sdk/ui-sfx";
 import type { ChromaReceiver, FountainReceiver } from "ghostpacket-sdk/wasm-bridge";
 
 import FountainGridCanvas, { EMPTY_FOUNTAIN, type FountainView } from "./FountainGridCanvas";
 import type { GhostState } from "./GhostContext";
-import SpectrogramCanvas, { type SignalSink } from "./SpectrogramCanvas";
+import SpectrogramCanvas, { type SignalSink, type SpectrumBand } from "./SpectrogramCanvas";
 
 const btn = "rounded-lg px-3 py-3 text-sm transition disabled:opacity-40";
 const select = "rounded-md bg-ink/[0.045] px-2 py-1 font-mono text-[11px] text-ink outline-none focus:bg-ink/[0.08]";
@@ -29,6 +30,12 @@ export type LightMode = "qr" | "chroma";
 /** Frames over 512 B (GPKT v2) only fit OFDM (≤ 16 KB) and ChromaCrypt (≤ 128 KB). */
 const V1_MAX = 512;
 const OFDM_MAX = 16 * 1024;
+const ULTRA_MAX = 256;
+const MODE_LABEL: Record<AcousticMode, string> = { robust: "4-FSK robust", fast: "4-FSK fast", ofdm: "OFDM", ultrasonic: "Ultrasonic whisper" };
+
+function bandOf(mode: AcousticMode): SpectrumBand {
+  return mode === "ofdm" ? "ofdm" : mode === "ultrasonic" ? "ultrasonic" : "fsk";
+}
 
 function mediaProblem(e: unknown): string | null {
   if (e instanceof DOMException && ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError", "OverconstrainedError", "NotSupportedError"].includes(e.name)) return e.name;
@@ -41,6 +48,7 @@ function soundOptions(len: number): { id: AcousticMode; label: string; ok: boole
     { id: "robust", label: "4-FSK robust · 133 bit/s", ok: len <= V1_MAX },
     { id: "fast", label: "4-FSK fast · 333 bit/s", ok: len <= V1_MAX },
     { id: "ofdm", label: "OFDM chord · ≈ 4 kbit/s", ok: len <= OFDM_MAX },
+    { id: "ultrasonic", label: "Ultrasonic whisper · 400 bit/s", ok: len <= ULTRA_MAX },
   ];
 }
 
@@ -55,12 +63,13 @@ function firstOk<T extends string>(opts: { id: T; ok: boolean }[], wanted: T): T
   return opts.find((o) => o.id === wanted && o.ok)?.id ?? opts.find((o) => o.ok)?.id ?? wanted;
 }
 
-export function AirSender({ ghost, frame, mode, caption }: { ghost: GhostState; frame: Uint8Array | null; mode: FskMode; caption?: string }) {
+export function AirSender({ ghost, frame, mode, caption }: { ghost: GhostState; frame: Uint8Array | null; mode: AcousticMode; caption?: string }) {
   const { core, keyInfo } = ghost;
   const len = frame?.length ?? 0;
   const [sound, setSound] = useState<AcousticMode>(mode);
   const [light, setLight] = useState<LightMode>("qr");
-  const [active, setActive] = useState<"sound" | "light" | null>(null);
+  const [active, setActive] = useState<"sound" | "light" | "chimera" | null>(null);
+  const [bursts, setBursts] = useState(0);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [index, setIndex] = useState(0);
@@ -125,6 +134,22 @@ export function AirSender({ ghost, frame, mode, caption }: { ghost: GhostState; 
     });
   };
 
+  /** Chimera Turbo: color matrices on the screen and droplet bundles on the speaker, one fountain. */
+  const sendChimera = () => {
+    if (!frame) return;
+    stop();
+    setActive("chimera");
+    setBursts(0);
+    spectral("transmit");
+    abort.current = new AbortController();
+    const signal = abort.current.signal;
+    requestAnimationFrame(() => {
+      const c = canvas.current;
+      if (!c) return;
+      chimeraBroadcast(core, frame, c, signal, { onMatrix: (i) => setIndex(i), onBurst: (b) => setBursts(b + 1) }).catch((e: unknown) => setStatus(String(e)));
+    });
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-2">
@@ -157,16 +182,19 @@ export function AirSender({ ghost, frame, mode, caption }: { ghost: GhostState; 
           Show the full-screen {lightMode === "chroma" ? "color-matrix" : "QR"} stream
         </button>
       </div>
+      <button type="button" onClick={sendChimera} disabled={!frame || active !== null} className={`${btn} bg-ink/[0.06] text-ink hover:bg-ink/[0.1]`}>
+        Chimera Turbo · color matrices and OFDM droplets together
+      </button>
       <div className="h-1.5 overflow-hidden rounded bg-void" aria-label="Burst progress">
         <div className="h-full bg-phosphor transition-[width] duration-100" style={{ width: `${progress * 100}%` }} />
       </div>
-      {active === "sound" && <SpectrogramCanvas core={core} ref={spectro} syncLocked={false} caption="emitted signal" />}
+      {active === "sound" && <SpectrogramCanvas core={core} ref={spectro} syncLocked={false} caption="emitted signal" band={bandOf(soundMode)} />}
       {status && <p className="font-mono text-xs text-mute">{status}</p>}
-      {active === "light" && (
+      {(active === "light" || active === "chimera") && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white" role="dialog" aria-label="Full-screen optical stream">
-          <canvas ref={canvas} width={lightMode === "chroma" ? 936 : 600} height={lightMode === "chroma" ? 936 : 600} className="pixelated aspect-square w-[min(80vh,92vw)]" />
+          <canvas ref={canvas} width={lightMode === "chroma" || active === "chimera" ? 936 : 600} height={lightMode === "chroma" || active === "chimera" ? 936 : 600} className="pixelated aspect-square w-[min(80vh,92vw)]" />
           <p className="font-mono text-sm text-[#04150c]">
-            {caption ?? "GhostPacket"} · {lightMode === "chroma" ? "ChromaCrypt" : "QR"} #{index} · {len} B · {keyInfo.fingerprint}
+            {caption ?? "GhostPacket"} · {active === "chimera" ? `Chimera Turbo · matrix #${index} · OFDM burst #${bursts}` : `${lightMode === "chroma" ? "ChromaCrypt" : "QR"} #${index}`} · {len} B · {keyInfo.fingerprint}
           </p>
           <button type="button" onClick={stop} className="rounded-lg bg-[#04150c] px-4 py-2 text-sm text-[#e9fff3]">
             Close
@@ -184,7 +212,7 @@ export function AirReceiver({
   onPartial,
 }: {
   ghost: GhostState;
-  mode: FskMode;
+  mode: AcousticMode;
   onFrame: (frame: Uint8Array, channel: Channel) => void;
   /** ChromaCrypt only: decoded-block map while a large frame arrives. */
   onPartial?: (decoded: boolean[]) => void;
@@ -192,7 +220,7 @@ export function AirReceiver({
   const { core } = ghost;
   const [sound, setSound] = useState<AcousticMode>(mode);
   const [light, setLight] = useState<LightMode>("qr");
-  const [active, setActive] = useState<"mic" | "camera" | null>(null);
+  const [active, setActive] = useState<"mic" | "camera" | "chimera" | null>(null);
   const [status, setStatus] = useState("");
   const [micStatus, setMicStatus] = useState<MicStatus | null>(null);
   const [fountain, setFountain] = useState<FountainView>(EMPTY_FOUNTAIN);
@@ -232,7 +260,7 @@ export function AirReceiver({
       },
       onFrame: (frame, info) => {
         setStatus(`frame received (${frame.length} B) · ${info.meanSymbolSnrDb.toFixed(1)} dB · ${info.correctedBytes} byte(s) fixed`);
-        deliver.current(frame, sound === "ofdm" ? "ofdm" : "sound");
+        deliver.current(frame, sound === "ofdm" ? "ofdm" : sound === "ultrasonic" ? "ultrasonic" : "sound");
       },
     });
     mic.current = receiver;
@@ -310,6 +338,71 @@ export function AirReceiver({
     }
   };
 
+  /** Chimera Turbo: camera and microphone feed one wide-fountain decoder. */
+  const turbo = async () => {
+    stop();
+    setFountain(EMPTY_FOUNTAIN);
+    if (!video.current) return;
+    setActive("chimera");
+    const receiver = core.chromaRx();
+    rx.current = receiver;
+    let byLight = 0;
+    let bySound = 0;
+    let done = false;
+    const progress = (s: { totalK: number; resolvedCount: number; newlyResolved: number[]; cascadeDepth: number; solvedByElimination: boolean; dropletsReceived: number; pending: number; complete: boolean }) => {
+      const decoded = Array.from(receiver.decodedMap(), (b) => b === 1);
+      setFountain((v) => ({
+        k: s.totalK,
+        decoded,
+        flash: s.newlyResolved,
+        cascadeDepth: Math.max(v.cascadeDepth, s.cascadeDepth),
+        byElimination: v.byElimination || s.solvedByElimination,
+        shown: byLight + bySound,
+        received: s.dropletsReceived,
+        pending: s.pending,
+        complete: s.complete,
+      }));
+      partial.current?.(decoded);
+      setStatus(`Chimera Turbo · ${byLight} droplet(s) by light · ${bySound} by sound · ${s.resolvedCount}/${s.totalK} blocks`);
+      if (s.complete && !done) {
+        done = true;
+        const frame = receiver.frame();
+        stop();
+        if (frame.ok) deliver.current(frame.value, "chimera");
+        else setStatus(`${frame.error.code}: ${frame.error.message}`);
+      }
+    };
+    try {
+      const scanner = new ChromaScanner(video.current, receiver, (res) => {
+        if (done || !res.step) return;
+        byLight++;
+        progress(res.step);
+      });
+      cam.current = scanner;
+      const ear = new MicReceiver(core, "ofdm", {
+        onTick: (t) => {
+          spectro.current?.push(t.window, t.sampleRate);
+          emitLevel(t.window);
+        },
+        onStatus: (s) => setMicStatus(s),
+        onFrame: (bytes) => {
+          if (done || !isBundle(bytes)) return;
+          const got = receiver.ingestBundle(bytes);
+          if (!got.ok || !got.value.step) return;
+          bySound += got.value.accepted;
+          progress(got.value.step);
+        },
+      });
+      mic.current = ear;
+      await Promise.all([scanner.start(), ear.start()]);
+      setStatus("Chimera Turbo · camera and microphone on");
+    } catch (e) {
+      stop();
+      const p = mediaProblem(e);
+      setStatus(p ? `Camera or microphone unavailable (${p}). Try the virtual Chimera Turbo in the simulation.` : String(e));
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-2">
@@ -338,13 +431,18 @@ export function AirReceiver({
         <button type="button" onClick={active === "mic" ? stop : listen} disabled={active === "camera"} className={`${btn} bg-phosphor/10 text-phosphor hover:bg-phosphor/20`}>
           {active === "mic" ? "Stop listening" : "Listen (microphone)"}
         </button>
-        <button type="button" onClick={active === "camera" ? stop : () => void scan()} disabled={active === "mic"} className={`${btn} bg-ion/10 text-ion hover:bg-ion/20`}>
+        <button type="button" onClick={active === "camera" ? stop : () => void scan()} disabled={active === "mic" || active === "chimera"} className={`${btn} bg-ion/10 text-ion hover:bg-ion/20`}>
           {active === "camera" ? "Stop camera" : "Scan the screen (camera)"}
         </button>
       </div>
-      {active === "mic" && <SpectrogramCanvas core={core} ref={spectro} syncLocked={micStatus === "sync" || micStatus === "decoded"} caption="microphone" />}
-      <video ref={video} className={`w-full rounded-lg ${active === "camera" ? "block" : "hidden"}`} muted playsInline />
-      {(active === "camera" || fountain.k > 0) && <FountainGridCanvas view={fountain} />}
+      <button type="button" onClick={active === "chimera" ? stop : () => void turbo()} disabled={active === "mic" || active === "camera"} className={`${btn} bg-ink/[0.06] text-ink hover:bg-ink/[0.1]`}>
+        {active === "chimera" ? "Stop Chimera Turbo" : "Chimera Turbo · camera and microphone together"}
+      </button>
+      {(active === "mic" || active === "chimera") && (
+        <SpectrogramCanvas core={core} ref={spectro} syncLocked={micStatus === "sync" || micStatus === "decoded"} caption="microphone" band={active === "chimera" ? "ofdm" : bandOf(sound)} />
+      )}
+      <video ref={video} className={`w-full rounded-lg ${active === "camera" || active === "chimera" ? "block" : "hidden"}`} muted playsInline />
+      {(active === "camera" || active === "chimera" || fountain.k > 0) && <FountainGridCanvas view={fountain} />}
       {status && <p className="font-mono text-xs text-mute">{status}</p>}
     </div>
   );
@@ -480,6 +578,86 @@ export function VirtualHandover({
         <canvas ref={canvas} width={side} height={side} className="pixelated w-full max-w-[300px] rounded-md bg-white" aria-label={mode === "chroma" ? "Virtual ChromaCrypt stream" : "Virtual QR stream"} />
         <FountainGridCanvas view={fountain} />
       </div>
+      {status && <p className="font-mono text-xs text-mute">{status}</p>}
+    </div>
+  );
+}
+
+/**
+ * Software speaker → air → microphone path: the core synthesizes the burst,
+ * white noise is added at `snrDb`, and the core demodulates what was "heard",
+ * in real time. One burst reaches every listener at once (a room broadcast).
+ */
+export function VirtualBroadcast({
+  ghost,
+  frame,
+  mode,
+  onFrame,
+  snrDb = 15,
+  label = "Broadcast over the virtual air",
+}: {
+  ghost: GhostState;
+  frame: Uint8Array | null;
+  mode: AcousticMode;
+  onFrame: (frame: Uint8Array, channel: Channel) => void;
+  snrDb?: number;
+  label?: string;
+}) {
+  const { core } = ghost;
+  const spectro = useRef<SignalSink>(null);
+  const abort = useRef<AbortController | null>(null);
+  const [running, setRunning] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [status, setStatus] = useState("");
+  useEffect(() => () => abort.current?.abort(), []);
+  const len = frame?.length ?? 0;
+  const ok = soundOptions(len).some((o) => o.id === mode && o.ok);
+  const seconds = frame && ok ? (mode === "ofdm" ? core.ofdmBurstSeconds(len) : core.fskBurstSeconds(len, mode)) : 0;
+
+  const run = async () => {
+    if (!frame || !ok) return;
+    abort.current?.abort();
+    const ac = new AbortController();
+    abort.current = ac;
+    setRunning(true);
+    setLocked(false);
+    setStatus("");
+    spectral("transmit");
+    const t0 = performance.now();
+    try {
+      const out = await runAcousticLoopback(core, frame, {
+        mode,
+        snrDb,
+        seed: core.crc32(frame) >>> 0,
+        playAudio: false,
+        signal: ac.signal,
+        onTick: (t) => {
+          spectro.current?.push(t.window, t.sampleRate);
+          emitLevel(t.window);
+          if (t.syncLocked) setLocked(true);
+        },
+      });
+      const secs = (performance.now() - t0) / 1000;
+      if (out.result.ok) {
+        setStatus(`${MODE_LABEL[mode]} · ${len} B in ${secs.toFixed(1)} s (${((len * 8) / secs / 1000).toFixed(2)} kbit/s) at ${snrDb} dB SNR · ${out.result.value.correctedBytes} byte(s) fixed by Reed-Solomon`);
+        onFrame(out.result.value.frame, mode === "ofdm" ? "ofdm" : mode === "ultrasonic" ? "ultrasonic" : "sound");
+      } else {
+        setStatus(`${out.result.error.code}: ${out.result.error.message}`);
+      }
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === "AbortError")) setStatus(String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button type="button" onClick={() => void run()} disabled={!frame || !ok || running} className="cta-ember px-5 py-3 text-sm font-semibold disabled:opacity-50">
+        {running ? "On the air…" : `▶ ${label}${frame && ok ? ` (${seconds.toFixed(1)} s)` : ""}`}
+      </button>
+      {(running || status) && <SpectrogramCanvas core={core} ref={spectro} syncLocked={locked} caption={`virtual air · ${snrDb} dB SNR`} band={bandOf(mode)} />}
+      {!ok && frame && <p className="font-mono text-xs text-amber">This frame ({len} B) is too large for {mode}.</p>}
       {status && <p className="font-mono text-xs text-mute">{status}</p>}
     </div>
   );

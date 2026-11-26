@@ -5,11 +5,13 @@ import "./tontine-store";
 import { useEffect, useMemo, useState } from "react";
 
 import { findRedemption, guardScope, redeem, redeemOnce, type LedgerCheck } from "ghostpacket-sdk/ledger";
-import { issuerPinned, redemptionGate } from "ghostpacket-sdk/redemption-policy";
+import { ledgerTotal, receiptIdText, sealCompact } from "ghostpacket-sdk/ledger-batch";
+import { issuerPinned, redemptionGate, type DocKind } from "ghostpacket-sdk/redemption-policy";
 import { docIdBytes, freeId, shortId } from "ghostpacket-sdk/records";
 import { FLAG_FOUNTAIN, FLAG_FSK, type Channel, type DocumentDraft, type FskMode, type VerifiedFrame } from "ghostpacket-sdk/types";
 import type { Result } from "ghostpacket-sdk/wasm-bridge";
-import { AirReceiver, AirSender, VirtualHandover } from "ghostpacket-ui/AirTransfer";
+import { AirReceiver, AirSender, VirtualBroadcast, VirtualHandover } from "ghostpacket-ui/AirTransfer";
+import WhisperIdentity from "ghostpacket-ui/WhisperIdentity";
 import CryptLedger from "ghostpacket-ui/CryptLedger";
 import { Hero, NumberField, Panel, Stat, TabBar, TextField } from "ghostpacket-ui/FormKit";
 import type { GhostState } from "ghostpacket-ui/GhostContext";
@@ -108,6 +110,43 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
       "TNT",
     );
 
+  /** Every unpaid member at once (cash collected at the meeting). */
+  const recordAll = () => roster.filter((m) => !paidThisRound.some((i) => i.memberId === m.id)).forEach((m) => recordContribution(m));
+
+  /** One signed round ledger listing every receipt of the round, for a room broadcast. */
+  const sealRound = () => {
+    setError(null);
+    const receipts = paidThisRound;
+    if (receipts.length === 0) return setError("No contribution recorded in this round yet");
+    if (receipts.length > core.limits.maxLedgerEntries) return setError(`A round ledger holds at most ${core.limits.maxLedgerEntries} contributions (${receipts.length} this round)`);
+    const docId = freeId(() => shortId("LDG", 4), (id) => !!issuedStore.get(id));
+    if (!docId) return setError("No free document id: archive old documents");
+    const entries = receipts.map((r) => {
+      const m = roster.find((x) => x.id === r.memberId);
+      return { member: (m ? `${m.name} (member #${m.number})` : r.memberId).slice(0, FIELD), amountMinor: r.amount, receiptId: docIdBytes(r.docId) };
+    });
+    const total = ledgerTotal(entries);
+    const draft: DocumentDraft = {
+      docId: docIdBytes(docId),
+      timestamp: Math.floor(Date.now() / 1000),
+      body: {
+        ledgerBatchDelta: {
+          group: g.group.trim(),
+          collector: g.collector.trim(),
+          currency: g.currency,
+          cycle: g.cycle,
+          entries,
+          note: `Round ${g.cycle}: ${entries.length} contribution(s), ${xof(total)}.`.slice(0, NOTE),
+        },
+      },
+    };
+    const enc = sealCompact(core, draft, seed, FLAGS);
+    if (!enc.ok) return setError(`${enc.error.code}: ${enc.error.message}`);
+    const rec = { id: docId, kind: "batch" as const, memberId: "", docId, cycle: g.cycle, amount: total, frameB64: toB64(enc.value.frame), frameLen: enc.value.frameLen, fingerprint: enc.value.fingerprint };
+    if (!issuedStore.put(rec)) return setError("Ledger full (500 documents)");
+    setCurrent(issuedStore.get(docId) ?? null);
+  };
+
   const issueVoucher = () => {
     const m = roster.find((x) => x.id === vMember) ?? roster[0];
     if (!m) return;
@@ -157,6 +196,16 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
         if (issuerPinned(v.value, keyInfo.publicKeyHex)) {
           wallet.put({ id: key, kind: "voucher", docId, group: body.emergencyVoucher.program, amount, cycle: 0, fingerprint: v.value.fingerprint, validUntil: body.emergencyVoucher.validUntil });
         }
+      } else if ("ledgerBatchDelta" in body && redemptionGate(v.value, { kind: "ledgerBatchDelta", selfKeyHex: keyInfo.publicKeyHex }).ok) {
+        // A round ledger is kept once per phone, like a receipt (same anti-replay scope).
+        const known = findRedemption("receipts", v.value);
+        const l = body.ledgerBatchDelta;
+        if (!known && !wallet.put({ id: key, kind: "ledger", docId, group: l.group, amount: ledgerTotal(l.entries), cycle: l.cycle, fingerprint: v.value.fingerprint })) {
+          refused = "Wallet full (300 documents)";
+        } else {
+          check = redeem("receipts", v.value, channel);
+          if (check.status === "first" && !sdk.queueProof(frame, v.value, channel)) refused = "Outbox full: sync soon";
+        }
       }
     }
     const n = seq + 1;
@@ -177,15 +226,34 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
     setReceived({ ...received, check: out, refused: queued ? undefined : "Outbox full: sync before the next pay-out", seq: n });
   };
 
-  const isVoucher = received?.v.ok && "emergencyVoucher" in received.v.value.document.body;
-  const gate = received?.v.ok ? redemptionGate(received.v.value, { kind: isVoucher ? "emergencyVoucher" : "tontineReceipt", selfKeyHex: keyInfo.publicKeyHex }) : null;
-  const gateLabel = received?.v.ok ? ("tontineReceipt" in received.v.value.document.body ? received.v.value.document.body.tontineReceipt.collector : "emergencyVoucher" in received.v.value.document.body ? received.v.value.document.body.emergencyVoucher.distributor : "Issuer") : "Issuer";
+  const rxBody = received?.v.ok ? received.v.value.document.body : null;
+  const isVoucher = !!rxBody && "emergencyVoucher" in rxBody;
+  const rxLedger = rxBody && "ledgerBatchDelta" in rxBody ? rxBody.ledgerBatchDelta : null;
+  const gateKind: DocKind = isVoucher ? "emergencyVoucher" : rxLedger ? "ledgerBatchDelta" : "tontineReceipt";
+  const gate = received?.v.ok ? redemptionGate(received.v.value, { kind: gateKind, selfKeyHex: keyInfo.publicKeyHex }) : null;
+  const gateLabel = rxBody ? ("tontineReceipt" in rxBody ? rxBody.tontineReceipt.collector : "emergencyVoucher" in rxBody ? rxBody.emergencyVoucher.distributor : rxLedger ? rxLedger.collector : "Issuer") : "Issuer";
+  /** Receipts already in this wallet that the round ledger confirms. */
+  const rxFingerprint = received?.v.ok ? received.v.value.fingerprint : "";
+  const confirmed = rxLedger
+    ? rxLedger.entries
+        .filter((e) => purse.some((w) => w.kind === "receipt" && w.docId === receiptIdText(e) && w.fingerprint === rxFingerprint && w.amount === e.amountMinor))
+        .map(receiptIdText)
+    : [];
   const currentFrame = current ? fromB64(current.frameB64) : null;
   const currentMember = current ? roster.find((m) => m.id === current.memberId) : undefined;
 
   const handover = (
     <Panel title="Hand over to the member's phone" aside={<ModeSelect mode={mode} onChange={setMode} />}>
-      {current && currentFrame ? (
+      {current && currentFrame && current.kind === "batch" ? (
+        <>
+          <p className="font-mono text-xs text-ink">
+            Round {current.cycle} ledger {current.docId} · {xof(current.amount)} · {current.frameLen} B (GPKT v{currentFrame[4]}) · {current.fingerprint}
+          </p>
+          <p className="text-[12px] text-mist">One OFDM chord reaches every member phone listening in the room at the same time. Each phone verifies the treasurer&apos;s signature and checks its own receipts against the list.</p>
+          <VirtualBroadcast ghost={ghost} frame={currentFrame} mode="ofdm" snrDb={15} onFrame={receive} label="Broadcast the round ledger to every member phone (virtual OFDM chord)" />
+          <AirSender ghost={ghost} frame={currentFrame} mode="ofdm" caption={`GhostTontine ${current.docId}`} />
+        </>
+      ) : current && currentFrame ? (
         <>
           <p className="font-mono text-xs text-ink">
             {current.kind === "receipt" ? "Receipt" : "Aid voucher"} {current.docId} · {currentMember?.name ?? current.memberId} · {xof(current.amount)} · {current.frameLen} B · {current.fingerprint}
@@ -253,6 +321,22 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
                 );
               })}
             </ul>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={recordAll} disabled={paidThisRound.length >= roster.length} className="btn-tonal rounded-full px-4 py-1.5 text-[12px] disabled:opacity-40">
+                Record every remaining contribution
+              </button>
+              <button type="button" onClick={sealRound} disabled={paidThisRound.length === 0} className="btn-accent px-4 py-1.5 text-[12px] disabled:opacity-40">
+                Seal the round ledger ({paidThisRound.length} contribution{paidThisRound.length === 1 ? "" : "s"}, one frame)
+              </button>
+            </div>
+            {issued
+              .filter((i) => i.kind === "batch" && i.cycle === g.cycle)
+              .slice(0, 3)
+              .map((i) => (
+                <button key={i.id} type="button" onClick={() => setCurrent(i)} className="self-start font-mono text-[11px] text-mist hover:text-ink">
+                  round ledger {i.docId} · {xof(i.amount)} · {i.frameLen} B
+                </button>
+              ))}
             <button type="button" onClick={() => setG({ ...g, cycle: g.cycle + 1 })} className="self-start font-mono text-[11px] text-mist hover:text-ink">
               close round {g.cycle} → open round {g.cycle + 1}
             </button>
@@ -264,6 +348,12 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
               <TextField label="Group" value={g.group} max={FIELD} onChange={(group) => setG({ ...g, group })} />
               <TextField label="Treasurer" value={g.collector} max={FIELD} onChange={(collector) => setG({ ...g, collector })} />
               <IdentityQr keyInfo={keyInfo} />
+              <details className="rounded-xl bg-ink/[0.035] p-3">
+                <summary className="cursor-pointer text-[12px] text-mist">Silent key exchange · Ultrasonic Whisper</summary>
+                <div className="mt-2">
+                  <WhisperIdentity ghost={ghost} label={g.collector.slice(0, 32)} variant="field" />
+                </div>
+              </details>
             </Panel>
           </div>
         </div>
@@ -316,7 +406,7 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
                 {purse.map((w) => (
                   <li key={w.id} className="flex justify-between gap-2 py-1.5">
                     <span className="text-ink">
-                      {w.kind === "receipt" ? `Receipt · round ${w.cycle}` : "Aid voucher"} · {w.docId}
+                      {w.kind === "receipt" ? `Receipt · round ${w.cycle}` : w.kind === "ledger" ? `Round ${w.cycle} ledger` : "Aid voucher"} · {w.docId}
                       {w.validUntil !== undefined && w.validUntil < Date.now() / 1000 ? <span className="text-alarm"> · expired</span> : null}
                     </span>
                     <span className={w.kind === "receipt" ? "text-phosphor" : "text-accent"}>{xof(w.amount)}</span>
@@ -329,6 +419,12 @@ export default function TontineApp({ ghost }: { ghost: GhostState }) {
             <ResultCard key={received?.seq ?? 0} verification={received?.v ?? null} channel={received ? (received.channel === "sound" ? "microphone" : "camera") : "microphone or camera"} replay={received?.check} />
             {received?.v.ok && gate && !gate.ok && <IssuerGate gate={gate} verified={received.v.value} label={gateLabel} onPinned={() => receive(received.frame, received.channel)} />}
             {received?.refused && <p className="rounded-lg bg-alarm/10 p-2 font-mono text-[11px] text-alarm">{received.refused}</p>}
+            {rxLedger && gate?.ok && (
+              <p className="rounded-lg bg-phosphor/10 p-2 text-[12px] text-phosphor">
+                Round {rxLedger.cycle} ledger kept: {rxLedger.entries.length} contribution(s), {xof(ledgerTotal(rxLedger.entries))}.{" "}
+                {confirmed.length > 0 ? `It confirms ${confirmed.length} receipt(s) in this wallet: ${confirmed.join(", ")}.` : "No receipt of this wallet is in the list."}
+              </p>
+            )}
             {isVoucher && gate?.ok && (
               <button
                 type="button"
