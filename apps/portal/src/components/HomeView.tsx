@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import SpookyScene3D from "ghostpacket-ui/SpookyScene3D";
-
 import { BUILD_INFO } from "@/lib/build-info";
 
 const CASES = [
@@ -100,9 +98,8 @@ export default function HomeView() {
           </p>
         </div>
 
-        {/* A 3D ghost over a carved pumpkin (Haunted Mode), then a sealed document, as the receiver sees it. */}
+        {/* A sealed document, as the receiver sees it. */}
         <div className="lg:col-span-4">
-          <SpookyScene3D className="-mb-4" />
           <aside
             className="panel rise relative p-6"
             aria-label="Example of a verified receipt"

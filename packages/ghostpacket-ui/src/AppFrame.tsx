@@ -15,6 +15,7 @@ import BatSwarmLayer from "./BatSwarmLayer";
 import BloodMoonAtmosphere from "./BloodMoonAtmosphere";
 import GhostCrew from "./GhostCrew";
 import { GhostProvider, useShell } from "./GhostContext";
+import HauntedBackdrop3D from "./HauntedBackdrop3D";
 import HauntedFun from "./HauntedFun";
 import SpectralEmblem from "./SpectralEmblem";
 import ThemeControls from "./ThemeControls";
@@ -74,6 +75,7 @@ function Frame({ app, brand, homeLink, nav, actions, footerNote, children }: App
   const loadMs = medianMs("wasm_load");
   return (
     <>
+      <HauntedBackdrop3D />
       <div className="mist" aria-hidden />
       <div className="grain" aria-hidden />
       <BloodMoonAtmosphere />

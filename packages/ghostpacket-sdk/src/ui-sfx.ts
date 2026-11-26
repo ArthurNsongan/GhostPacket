@@ -199,11 +199,11 @@ const HAUNTED: Record<Cue, (ctx: AudioContext, out: AudioNode, t: number) => voi
   synced: (c, o, t) => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, o, f, t + i * 0.09, 0.6, 0.025, "sine", 0.03)),
 };
 
-// ---- Fun click cues (Haunted Mode) -----------------------------------------
-// Cartoon-spooky, never scary: short, soft, a little silly. `p` detunes each
-// play slightly so repeated clicks do not sound mechanical.
+// ---- Click cues (Haunted Mode) ---------------------------------------------
+// Spooky but playful: short, soft, never a jump scare at full volume. `p`
+// detunes each play slightly so repeated clicks do not sound mechanical.
 
-export type FunCue = "boo" | "giggle" | "bat" | "pop" | "whoosh" | "chime";
+export type FunCue = "boo" | "giggle" | "whisper" | "bat" | "pop" | "whoosh" | "chime";
 
 function vibrato(c: AudioContext, osc: OscillatorNode, t: number, rate: number, depth: number, dur: number): void {
   const lfo = c.createOscillator();
@@ -215,37 +215,63 @@ function vibrato(c: AudioContext, osc: OscillatorNode, t: number, rate: number, 
   lfo.stop(t + dur + 0.05);
 }
 
+/** A short feedback echo, the "empty crypt" tail of ghost cues. */
+function echo(c: AudioContext, o: AudioNode, time: number, feedback: number): AudioNode {
+  const d = c.createDelay(1);
+  d.delayTime.value = time;
+  const fb = c.createGain();
+  fb.gain.value = feedback;
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 1400;
+  d.connect(lp).connect(fb).connect(d);
+  lp.connect(o);
+  const input = c.createGain();
+  input.connect(o);
+  input.connect(d);
+  return input;
+}
+
 const FUN: Record<FunCue, (c: AudioContext, o: AudioNode, t: number, p: number) => void> = {
-  // A friendly cartoon ghost: "woo-OO-oo", wobbling vowel through a soft low-pass.
+  // Ghost moan: two detuned voices sliding "ooOOooh", slow vibrato, crypt echo.
   boo: (c, o, t, p) => {
     const lp = c.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 1700;
-    lp.connect(o);
-    [1, 1.5].forEach((r, i) => {
+    lp.frequency.setValueAtTime(500, t);
+    lp.frequency.linearRampToValueAtTime(1300, t + 0.4);
+    lp.frequency.linearRampToValueAtTime(600, t + 1.2);
+    lp.connect(echo(c, o, 0.3, 0.42));
+    [1, 1.007, 1.5].forEach((r, i) => {
       const osc = c.createOscillator();
-      osc.type = i ? "sine" : "triangle";
-      osc.frequency.setValueAtTime(380 * p * r, t);
-      osc.frequency.exponentialRampToValueAtTime(620 * p * r, t + 0.2);
-      osc.frequency.exponentialRampToValueAtTime(300 * p * r, t + 0.62);
-      vibrato(c, osc, t, 7, 16 * r, 0.7);
-      osc.connect(env(c, t, i ? 0.012 : 0.05, 0.06, 0.7, lp));
+      osc.type = i === 2 ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(190 * p * r, t);
+      osc.frequency.exponentialRampToValueAtTime(330 * p * r, t + 0.42);
+      osc.frequency.exponentialRampToValueAtTime(165 * p * r, t + 1.2);
+      vibrato(c, osc, t, 4.6, 7 * r, 1.25);
+      osc.connect(env(c, t, i === 2 ? 0.012 : 0.045, 0.18, 1.25, lp));
       osc.start(t);
-      osc.stop(t + 0.75);
+      osc.stop(t + 1.3);
     });
   },
-  // Three little rising "hee-hee-hee" chirps.
+  // Faint, echoing "hee-hee" from somewhere behind you.
   giggle: (c, o, t, p) => {
-    [880, 1046, 1244, 1046].forEach((f, i) => {
-      const at = t + i * 0.075;
+    const out = echo(c, o, 0.19, 0.5);
+    [740, 830, 700, 790].forEach((f, i) => {
+      const at = t + i * 0.11;
       const osc = c.createOscillator();
       osc.type = "triangle";
       osc.frequency.setValueAtTime(f * p, at);
-      osc.frequency.exponentialRampToValueAtTime(f * p * 1.25, at + 0.05);
-      osc.connect(env(c, at, 0.03, 0.006, 0.07, o));
+      osc.frequency.exponentialRampToValueAtTime(f * p * 1.18, at + 0.06);
+      vibrato(c, osc, at, 18, 14, 0.09);
+      osc.connect(env(c, at, 0.018, 0.01, 0.09, out));
       osc.start(at);
-      osc.stop(at + 0.1);
+      osc.stop(at + 0.12);
     });
+  },
+  // "Shhh…": a breathy whisper fading away.
+  whisper: (c, o, t, p) => {
+    const f = burst(c, o, t, 0.6, 0.03, "bandpass", 2600 * p, 1.2);
+    f.frequency.exponentialRampToValueAtTime(1500 * p, t + 0.6);
   },
   // Two tiny bat squeaks and a wing flutter.
   bat: (c, o, t, p) => {
@@ -291,7 +317,7 @@ export async function funSfx(cue: FunCue): Promise<void> {
     out.gain.value = 0.8;
     out.connect(masterFor(ctx));
     FUN[cue](ctx, out, ctx.currentTime + 0.005, 0.92 + Math.random() * 0.16);
-    setTimeout(() => out.disconnect(), 1500);
+    setTimeout(() => out.disconnect(), 3500);
   } catch {
     /* audio unavailable: effects are optional */
   }

@@ -1,41 +1,54 @@
 "use client";
 
-// Ghostlings (V5): a few friendly Kiro-style ghosts that haunt the page margins.
-// GSAP drives everything: idle bobbing, wandering between the gutters, eyes that
-// follow the pointer, and a "Boo!" with a giggle when clicked (then poof, and
-// they come back elsewhere). They also react to protocol moments:
-// transmit → they race along, verified → happy hop, rejected / replay → scared.
+// Ghosts (V6): a few spectres that lurk in the page margins. Tall, tattered,
+// see-through, with hollow eye sockets, glowing pupils and a wailing mouth.
+// GSAP drives everything: slow floating, wandering, apparition flicker, pupils
+// that follow the pointer. When the pointer comes close they usually dissolve
+// and reappear elsewhere (so they never sit on what you read or click);
+// sometimes one stays and stares. Clicking it: it lunges at you with a "Boo."
+// and a moan, then vanishes. Protocol moments: transmit → they follow the
+// signal, verified → they retreat, rejected / replay → red eyes, they close in.
 // Haunted Mode only; nothing runs under prefers-reduced-motion.
 import { gsap } from "gsap";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { onSpectral } from "ghostpacket-sdk/effects";
 import { hauntedMotion, onThemeChange } from "ghostpacket-sdk/theme";
 import { funSfx } from "ghostpacket-sdk/ui-sfx";
 
-/** Original ghost drawing: dome, wavy hem, big oval eyes, blush. viewBox 100 × 110. */
+/** Original spectre drawing: tattered hem, hollow slanted eyes, glowing pupils, wailing mouth. viewBox 100 × 150. */
 export function Ghostling({ size = 56 }: { size?: number }) {
+  const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 100 110" width={size} height={size * 1.1} aria-hidden>
+    <svg viewBox="0 0 100 150" width={size} height={size * 1.5} aria-hidden>
+      <defs>
+        <linearGradient id={`gb${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="oklch(0.96 0.012 300)" stopOpacity="0.95" />
+          <stop offset="0.55" stopColor="oklch(0.88 0.03 300)" stopOpacity="0.7" />
+          <stop offset="1" stopColor="oklch(0.8 0.05 300)" stopOpacity="0" />
+        </linearGradient>
+        <radialGradient id={`gm${id}`} cx="0.5" cy="0.35" r="0.7">
+          <stop offset="0" stopColor="oklch(0.05 0.02 300)" />
+          <stop offset="1" stopColor="oklch(0.2 0.05 300)" />
+        </radialGradient>
+      </defs>
       <path
         className="g-body"
-        d="M50 6C26 6 13 25 13 49v42c0 6 6 10 11 5 5-5 9-5 13 1 4 6 9 7 13 1 4-6 9-6 13 0 4 6 9 5 13-1 4-5 9-3 11 2V49C87 25 74 6 50 6z"
+        fill={`url(#gb${id})`}
+        d="M50 4C25 4 13 26 13 54v40l-4 22 10-12 1 30 9-24 6 34 8-30 7 30 7-30 8 34 6-34 9 24 1-30 10 12-4-22V54C87 26 75 4 50 4z"
       />
+      <path className="g-eye" d="M27 49q9-9 19 2-3 12-12 11-8-2-7-13z" />
+      <path className="g-eye" d="M73 49q-9-9-19 2 3 12 12 11 8-2 7-13z" />
       <g className="g-pupils">
-        <ellipse className="g-eye" cx="37" cy="46" rx="6.5" ry="9.5" />
-        <ellipse className="g-eye" cx="63" cy="46" rx="6.5" ry="9.5" />
-        <circle className="g-shine" cx="39" cy="42" r="2.2" />
-        <circle className="g-shine" cx="65" cy="42" r="2.2" />
+        <circle className="g-pupil" cx="37" cy="54" r="2.6" />
+        <circle className="g-pupil" cx="63" cy="54" r="2.6" />
       </g>
-      <ellipse className="g-cheek" cx="27" cy="60" rx="6" ry="3.5" />
-      <ellipse className="g-cheek" cx="73" cy="60" rx="6" ry="3.5" />
-      <ellipse className="g-mouth g-eye" cx="50" cy="64" rx="4" ry="3.2" />
-      <path className="g-smile" d="M42 61q8 9 16 0" fill="none" stroke="oklch(0.16 0.03 300)" strokeWidth="3" strokeLinecap="round" />
+      <ellipse className="g-mouth" fill={`url(#gm${id})`} cx="50" cy="84" rx="7" ry="12" />
     </svg>
   );
 }
 
-const BOOS = ["Boo!", "Boo?", "Hehe", "Wooo", "Peek!"];
+const WHISPERS = ["Boo.", "Leave…", "I see you", "Shhh…", "Not alone", "BOO!"];
 
 interface Spec {
   size: number;
@@ -43,10 +56,11 @@ interface Spec {
 }
 
 const CREW: Spec[] = [
-  { size: 58, side: "left" },
-  { size: 66, side: "right" },
-  { size: 44, side: "right" },
+  { size: 60, side: "left" },
+  { size: 72, side: "right" },
+  { size: 48, side: "right" },
 ];
+const REST = 0.78;
 
 export default function GhostCrew() {
   const [on, setOn] = useState(false);
@@ -66,6 +80,8 @@ export default function GhostCrew() {
   return on ? <Crew /> : null;
 }
 
+type GhostEl = HTMLElement & { look?: (x: number, y: number) => void; react?: (e: string) => void };
+
 function Crew() {
   const root = useRef<HTMLDivElement>(null);
   const [count] = useState(() => (typeof window !== "undefined" && window.innerWidth < 768 ? 1 : CREW.length));
@@ -73,7 +89,7 @@ function Crew() {
   useEffect(() => {
     const el = root.current;
     if (!el) return;
-    const ghosts = [...el.querySelectorAll<HTMLElement>(".ghostling")];
+    const ghosts = [...el.querySelectorAll<GhostEl>(".ghostling")];
     const W = () => window.innerWidth;
     const H = () => window.innerHeight;
     const rand = gsap.utils.random;
@@ -83,7 +99,7 @@ function Crew() {
         const spec = CREW[i] ?? CREW[0]!;
         const svg = g.querySelector("svg")!;
         const pupils = g.querySelector<SVGGElement>(".g-pupils")!;
-        const bubble = g.querySelector<HTMLElement>(".boo-bubble")!;
+        const whisper = g.querySelector<HTMLElement>(".boo-whisper")!;
         let side = spec.side;
         let busy = false;
 
@@ -92,53 +108,53 @@ function Crew() {
           const w = W();
           const h = H();
           const narrow = w < 768;
-          const xs = narrow ? [0.04 * w, 0.22 * w] : side === "left" ? [0.015 * w, 0.12 * w] : [0.86 * w, 0.95 * w - spec.size];
-          const ys = narrow ? [0.7 * h, 0.86 * h] : [0.2 * h, 0.85 * h];
-          return { x: rand(xs[0]!, xs[1]!), y: rand(ys[0]!, ys[1]!) };
+          const xs = narrow ? [0.04 * w, 0.22 * w] : side === "left" ? [0.01 * w, 0.1 * w] : [0.88 * w, 0.97 * w - spec.size];
+          const ys = narrow ? [0.62 * h, 0.8 * h] : [0.18 * h, 0.78 * h];
+          // Prefer a spot that does not cover a control.
+          let p = { x: 0, y: 0 };
+          for (let k = 0; k < 8; k++) {
+            p = { x: rand(xs[0]!, xs[1]!), y: rand(ys[0]!, ys[1]!) };
+            const hit = document
+              .elementsFromPoint(p.x + spec.size / 2, p.y + spec.size * 0.75)
+              .some((n) => !g.contains(n) && n.closest?.("a[href], button, input, select, textarea, [role='tab'], label"));
+            if (!hit) break;
+          }
+          return p;
         };
-        const start = target();
-        gsap.set(g, { x: start.x, y: start.y, opacity: 0, scale: 0.4 });
-        gsap.to(g, { opacity: 0.94, scale: 1, duration: 1.1, delay: 0.6 + i * 0.5, ease: "back.out(2)" });
+        const appear = (delay = 0) => {
+          const t = target();
+          gsap.set(g, { x: t.x, y: t.y, scale: 0.9, rotation: 0 });
+          return gsap.fromTo(g, { opacity: 0, filter: "blur(8px)" }, { opacity: REST, filter: "blur(0px)", scale: 1, duration: 1.6, delay, ease: "power2.out" });
+        };
+        appear(0.8 + i * 0.9);
 
-        // Idle: bob and sway on the inner SVG so wandering and bobbing combine.
-        gsap.to(svg, { y: -12, duration: rand(1.5, 2.2), ease: "sine.inOut", yoyo: true, repeat: -1 });
-        gsap.to(svg, { rotation: rand(-7, -4), duration: rand(2.4, 3.2), ease: "sine.inOut", yoyo: true, repeat: -1, transformOrigin: "50% 80%" });
-        gsap.to(svg, { scaleY: 0.95, scaleX: 1.04, duration: 0.9, ease: "sine.inOut", yoyo: true, repeat: -1, transformOrigin: "50% 100%" });
+        // Slow, heavy floating; the hem flutters.
+        gsap.to(svg, { y: -14, duration: rand(2.4, 3.4), ease: "sine.inOut", yoyo: true, repeat: -1 });
+        gsap.to(svg, { rotation: rand(-5, -2), duration: rand(3, 4.2), ease: "sine.inOut", yoyo: true, repeat: -1, transformOrigin: "50% 30%" });
+        gsap.to(svg, { scaleY: 1.04, scaleX: 0.97, duration: 1.3, ease: "sine.inOut", yoyo: true, repeat: -1, transformOrigin: "50% 0%" });
 
         const wander = () => {
           if (!busy) {
             const t = target();
-            gsap.to(g, { x: t.x, y: t.y, duration: rand(5, 8), ease: "sine.inOut" });
+            gsap.to(g, { x: t.x, y: t.y, duration: rand(7, 11), ease: "sine.inOut" });
           }
-          gsap.delayedCall(rand(6, 10), wander);
+          gsap.delayedCall(rand(8, 13), wander);
         };
-        gsap.delayedCall(rand(2, 5), wander);
+        gsap.delayedCall(rand(3, 6), wander);
 
-        // Eyes follow the pointer.
-        const px = gsap.quickTo(pupils, "x", { duration: 0.4, ease: "power3.out" });
-        const py = gsap.quickTo(pupils, "y", { duration: 0.4, ease: "power3.out" });
-        // Shy: when the pointer comes close, it usually slips away (so it never
-        // sits on what you want to read or click), but now and then it lets you catch it.
-        let shyUntil = 0;
-        (g as HTMLElement & { look?: (x: number, y: number) => void }).look = (x, y) => {
-          const r = g.getBoundingClientRect();
-          const dx = x - (r.left + r.width / 2);
-          const dy = y - (r.top + r.height / 2);
-          const d = Math.hypot(dx, dy) || 1;
-          px((dx / d) * 3.2);
-          py((dy / d) * 2.6);
-          const now = performance.now();
-          if (busy || d > spec.size + 70 || now < shyUntil) return;
-          shyUntil = now + 1600;
-          if (Math.random() < 0.3) return; // caught off guard: click it!
-          const cur = { x: Number(gsap.getProperty(g, "x")), y: Number(gsap.getProperty(g, "y")) };
-          const away = 150 + Math.random() * 90;
-          const nx = gsap.utils.clamp(8, W() - spec.size - 8, cur.x - (dx / d) * away);
-          const ny = gsap.utils.clamp(80, H() - spec.size * 1.2 - 8, cur.y - (dy / d) * away);
-          gsap.to(g, { x: nx, y: ny, duration: 0.7, ease: "power3.out", overwrite: "auto" });
-          gsap.fromTo(svg, { scaleX: 0.8, scaleY: 1.15 }, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.4)" });
-          if (Math.random() < 0.35) void funSfx("giggle");
+        // Apparition flicker.
+        const flicker = () => {
+          if (!busy) {
+            gsap
+              .timeline()
+              .to(g, { opacity: 0.15, duration: 0.05 })
+              .to(g, { opacity: REST, x: "+=3", duration: 0.05 })
+              .to(g, { opacity: 0.05, duration: 0.07 })
+              .to(g, { opacity: REST, x: "-=3", duration: 0.12 });
+          }
+          gsap.delayedCall(rand(4, 9), flicker);
         };
+        gsap.delayedCall(rand(3, 7), flicker);
 
         const mood = (m: string, ms: number) => {
           g.dataset.mood = m;
@@ -147,59 +163,92 @@ function Crew() {
           });
         };
 
+        const vanish = (then = 1.4) => {
+          busy = true;
+          gsap.to(g, {
+            opacity: 0,
+            scale: 1.15,
+            y: "-=24",
+            filter: "blur(8px)",
+            duration: 0.45,
+            ease: "power2.in",
+            overwrite: "auto",
+            onComplete: () => {
+              side = Math.random() < 0.5 ? "left" : "right";
+              appear(then).eventCallback("onComplete", () => void (busy = false));
+            },
+          });
+        };
+
+        // Pupils follow the pointer; up close it dissolves, or stays and stares.
+        const px = gsap.quickTo(pupils, "x", { duration: 0.5, ease: "power3.out" });
+        const py = gsap.quickTo(pupils, "y", { duration: 0.5, ease: "power3.out" });
+        let nearUntil = 0;
+        g.look = (x, y) => {
+          const r = g.getBoundingClientRect();
+          const dx = x - (r.left + r.width / 2);
+          const dy = y - (r.top + r.height * 0.35);
+          const d = Math.hypot(dx, dy) || 1;
+          px((dx / d) * 3);
+          py((dy / d) * 2.4);
+          const now = performance.now();
+          if (busy || d > spec.size + 80 || now < nearUntil) return;
+          nearUntil = now + 2000;
+          // Over a control, it always gets out of the way; elsewhere it may stay and stare.
+          const overControl = document
+            .elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+            .some((n) => !g.contains(n) && n.closest?.("a[href], button, input, select, textarea, [role='tab'], label"));
+          if (!overControl && Math.random() < 0.3) {
+            mood("stare", 1800);
+            return;
+          }
+          void funSfx("whisper");
+          vanish();
+        };
+
         const boo = () => {
           if (busy) return;
           busy = true;
           void funSfx("boo");
-          gsap.delayedCall(0.35, () => void funSfx("giggle"));
-          mood("boo", 900);
-          bubble.textContent = BOOS[Math.floor(Math.random() * BOOS.length)] ?? "Boo!";
+          gsap.delayedCall(0.55, () => void funSfx("giggle"));
+          mood("boo", 1200);
+          whisper.textContent = WHISPERS[Math.floor(Math.random() * WHISPERS.length)] ?? "Boo.";
           gsap
             .timeline({
               onComplete: () => {
-                // Reappear somewhere else.
+                delete g.dataset.mood;
                 side = Math.random() < 0.5 ? "left" : "right";
-                const t = target();
-                gsap.set(g, { x: t.x, y: t.y });
-                gsap.to(g, { opacity: 0.94, scale: 1, rotation: 0, duration: 0.9, ease: "back.out(2.2)", onComplete: () => void (busy = false) });
+                appear(2.2).eventCallback("onComplete", () => void (busy = false));
               },
             })
-            .to(g, { scaleX: 1.3, scaleY: 0.75, duration: 0.09, ease: "power2.out" })
-            .to(g, { scaleX: 0.85, scaleY: 1.25, y: "-=26", duration: 0.16, ease: "power2.out" })
-            .fromTo(bubble, { opacity: 0, y: 8, scale: 0.6 }, { opacity: 1, y: 0, scale: 1, duration: 0.25, ease: "back.out(3)" }, "<")
-            .to(g, { scaleX: 1, scaleY: 1, rotation: 360, duration: 0.55, ease: "back.out(1.6)" })
-            .to(bubble, { opacity: 0, y: -10, duration: 0.3 }, "+=0.35")
-            .to(g, { scale: 0, opacity: 0, duration: 0.3, ease: "back.in(2)" }, "<")
-            .set(g, {}, "+=2.2");
+            .to(g, { scale: 0.85, y: "+=8", duration: 0.14, ease: "power2.out" })
+            .to(g, { scale: 2.3, opacity: 1, duration: 0.32, ease: "power4.in" })
+            .fromTo(whisper, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, "<")
+            .to(g, { opacity: 0, filter: "blur(10px)", duration: 0.35, ease: "power1.out" })
+            .to(whisper, { opacity: 0, y: -14, duration: 0.6 }, "<+0.2");
         };
         g.addEventListener("click", boo);
-        g.addEventListener("pointerenter", () => {
-          if (busy) return;
-          mood("happy", 1200);
-          gsap.fromTo(svg, { rotation: -10 }, { rotation: 0, duration: 0.6, ease: "elastic.out(1.2, 0.35)", overwrite: "auto" });
-        });
 
         // Protocol moments.
-        (g as HTMLElement & { react?: (e: string) => void }).react = (e) => {
+        g.react = (e) => {
           if (busy) return;
           if (e === "transmit") {
-            gsap.to(g, { x: W() * 0.9, duration: 1.4, ease: "power2.inOut", yoyo: true, repeat: 1, delay: i * 0.15 });
-            void funSfx("whoosh");
+            gsap.to(g, { x: W() * 0.88, duration: 1.6, ease: "power2.inOut", yoyo: true, repeat: 1, delay: i * 0.2 });
           } else if (e === "verified") {
-            mood("happy", 1800);
-            gsap.fromTo(g, { y: "-=0" }, { y: "-=40", duration: 0.28, ease: "power2.out", yoyo: true, repeat: 1, delay: i * 0.08 });
+            gsap.to(g, { opacity: 0.22, duration: 0.5, yoyo: true, repeat: 1, repeatDelay: 1.2 });
           } else if (e === "rejected" || e === "replay") {
-            mood("scared", 1700);
-            gsap.to(g, { opacity: 0.35, scale: 0.8, duration: 0.2, yoyo: true, repeat: 1, repeatDelay: 1.2 });
-            gsap.fromTo(svg, { x: -3 }, { x: 3, duration: 0.05, repeat: 15, yoyo: true, clearProps: "x" });
+            mood("angry", 1800);
+            const cx = W() / 2 - Number(gsap.getProperty(g, "x"));
+            gsap.to(g, { x: `+=${Math.sign(cx) * 60}`, opacity: 0.95, duration: 0.5, yoyo: true, repeat: 1, repeatDelay: 1, ease: "power2.out" });
+            gsap.fromTo(svg, { x: -2 }, { x: 2, duration: 0.04, repeat: 20, yoyo: true, clearProps: "x" });
           }
         };
       });
     }, el);
 
-    const look = (e: PointerEvent) => ghosts.forEach((g) => (g as HTMLElement & { look?: (x: number, y: number) => void }).look?.(e.clientX, e.clientY));
+    const look = (e: PointerEvent) => ghosts.forEach((g) => g.look?.(e.clientX, e.clientY));
     window.addEventListener("pointermove", look, { passive: true });
-    const offSpectral = onSpectral((e) => ghosts.forEach((g) => (g as HTMLElement & { react?: (e: string) => void }).react?.(e)));
+    const offSpectral = onSpectral((e) => ghosts.forEach((g) => g.react?.(e)));
     return () => {
       window.removeEventListener("pointermove", look);
       offSpectral();
@@ -210,8 +259,8 @@ function Crew() {
   return (
     <div ref={root} className="ghost-crew haunt-only" aria-hidden>
       {CREW.slice(0, count).map((s, i) => (
-        <div key={i} className="ghostling" title="Boo?">
-          <span className="boo-bubble" />
+        <div key={i} className="ghostling">
+          <span className="boo-whisper" />
           <Ghostling size={s.size} />
         </div>
       ))}

@@ -6,7 +6,9 @@ import { prefs } from "./storage";
 export type Theme = "haunted" | "clean";
 export type AppId = "portal" | "clinic" | "tontine";
 
-const KEY = "ghostpacket.theme";
+// Haunted is the default. V6 starts everyone in Haunted once (new key); the
+// choice is remembered again from there.
+const KEY = "ghostpacket.theme.v6";
 const listeners = new Set<(t: Theme) => void>();
 
 export function currentTheme(): Theme {

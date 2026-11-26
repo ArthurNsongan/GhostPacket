@@ -1,6 +1,19 @@
 # GhostPacket — Halloween Redesign Plan
 
-## V5 — "Midnight Atelier, playful haunt" (current)
+## V6 — "Midnight Atelier, haunted graveyard" (current)
+
+V6 keeps the V4 interface rules (typography, single warm accent, selection without outlines) and turns the V5 playful layer spookier. Haunted Mode is the default (the theme key moved to `ghostpacket.theme.v6`, so every visitor starts haunted once).
+
+| V5 | V6 |
+|---|---|
+| 3D ghost + pumpkin in the portal hero | **Full-page 3D backdrop** on every app (`HauntedBackdrop3D`, three.js on demand): misty graveyard under a huge moon, tombstones and crosses, dead trees, lit jack-o'-lanterns, translucent spectres with glowing eyes fading in and out between the graves, will-o'-the-wisps, bats circling the moon. The camera follows the pointer and walks into the graveyard on scroll. Panels become smoked glass over it |
+| Cute, round ghosts with blush | **Spectres** (`GhostCrew`): tall, tattered, see-through, hollow slanted eyes with glowing green pupils, a wailing mouth. They lurk, flicker like apparitions, dissolve when the pointer comes close (always when they sit on a control), sometimes stay and stare; clicked, they lunge at you with "Boo." / "I see you" and vanish |
+| Protocol: race, hop, scared | transmit → spectres stir and follow the signal; verified → they retreat and the wisps turn mist green; rejected / replay → blood moon, red fog, red eyes, the ghosts close in |
+| Cartoon "woo" and giggle | Ghost **moan** with crypt echo, faint echoing giggle, a "shhh" whisper when a ghost dissolves; buttons still pop, links whoosh, toggles squeak |
+
+---
+
+## V5 — "Midnight Atelier, playful haunt"
 
 V5 keeps the V4 typography, palette and selection rules and adds a playful, cartoon-spooky layer (fun, never frightening). Everything is Haunted Mode only, off under `prefers-reduced-motion`, and hidden in Clean Field Mode.
 

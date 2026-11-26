@@ -479,7 +479,7 @@ input[type="range"] {
   }
 }
 
-/* ---- Ghostlings (V5): friendly Kiro-style ghosts, Haunted Mode only ---------- */
+/* ---- Ghosts (V6): spectres lurking in the margins, Haunted Mode only -------- */
 .ghost-crew {
   position: fixed;
   inset: 0;
@@ -493,74 +493,78 @@ input[type="range"] {
   top: 0;
   pointer-events: auto;
   cursor: pointer;
-  will-change: transform;
-  filter: drop-shadow(0 0 14px color-mix(in oklab, var(--color-spectre) 55%, transparent)) drop-shadow(0 6px 10px oklch(0 0 0 / 0.35));
+  will-change: transform, opacity;
+  mix-blend-mode: screen;
   -webkit-tap-highlight-color: transparent;
+  --ghost-eye: oklch(0.9 0.16 165);
 }
 .ghostling svg {
   display: block;
   overflow: visible;
-}
-.g-body {
-  fill: oklch(0.98 0.008 300);
+  filter: drop-shadow(0 0 16px color-mix(in oklab, var(--color-spectre) 60%, transparent)) drop-shadow(0 0 3px oklch(1 0 0 / 0.35));
 }
 .g-eye {
-  fill: oklch(0.16 0.03 300);
+  fill: oklch(0.08 0.02 300);
 }
-.g-shine {
-  fill: oklch(1 0 0 / 0.9);
+.g-pupil {
+  fill: var(--ghost-eye);
+  filter: drop-shadow(0 0 3px var(--ghost-eye)) drop-shadow(0 0 7px var(--ghost-eye));
+  transition: fill 0.2s, r 0.2s;
 }
-.g-cheek {
-  fill: oklch(0.75 0.13 350 / 0.45);
-}
-.g-mouth,
-.g-smile {
-  transition: opacity 0.15s;
-}
-.g-smile {
-  opacity: 0;
-}
-.ghostling[data-mood="happy"] .g-mouth {
-  opacity: 0;
-}
-.ghostling[data-mood="happy"] .g-smile {
-  opacity: 1;
+.g-mouth {
+  transform-box: fill-box;
+  transform-origin: 50% 20%;
+  transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 .ghostling[data-mood="boo"] .g-mouth {
-  transform: scale(1.9);
-  transform-box: fill-box;
-  transform-origin: center;
+  transform: scale(1.35, 1.7);
 }
-.ghostling[data-mood="scared"] .g-body {
-  fill: oklch(0.9 0.03 300);
+.ghostling[data-mood="stare"] .g-pupil {
+  r: 3.4;
 }
-.boo-bubble {
+.ghostling[data-mood="angry"],
+.ghostling[data-mood="boo"] {
+  --ghost-eye: oklch(0.66 0.24 20);
+}
+.boo-whisper {
   position: absolute;
   left: 50%;
   bottom: 100%;
-  translate: -50% -4px;
+  translate: -50% 0;
   white-space: nowrap;
-  padding: 0.2rem 0.65rem 0.25rem;
-  border-radius: 999px;
-  background: oklch(0.98 0.008 300);
-  color: oklch(0.2 0.04 300);
+  color: oklch(0.96 0.01 300);
   font-family: var(--font-serif);
   font-style: italic;
   font-variation-settings: "SOFT" 100, "WONK" 1;
-  font-size: 15px;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 10px var(--color-spectre), 0 0 22px var(--color-spectre);
   opacity: 0;
   pointer-events: none;
 }
 
-/* 3D hero scene (three.js), Haunted Mode only. */
-.spooky-scene {
-  position: relative;
-  width: 100%;
-  height: clamp(240px, 32vw, 360px);
-  cursor: grab;
+/* 3D graveyard backdrop (V6), Haunted Mode only. */
+.haunted-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
 }
-.spooky-scene canvas {
+.haunted-backdrop canvas {
   display: block;
   width: 100% !important;
   height: 100% !important;
+}
+/* The 3D moon replaces the CSS one; panels turn to smoked glass over the graveyard. */
+.backdrop-3d .moon {
+  display: none;
+}
+/* <body> backgrounds paint above negative z-index layers: let the graveyard show. */
+.backdrop-3d body {
+  background: transparent;
+}
+:root[data-theme="haunted"].backdrop-3d .panel {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--color-panel) 80%, transparent) 0%, color-mix(in oklab, var(--color-panel) 72%, transparent) 140px);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
 }
