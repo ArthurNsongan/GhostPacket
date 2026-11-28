@@ -1,11 +1,11 @@
 # GhostPacket
 
-GhostPacket transmits a short **Ed25519-signed document** between two nearby devices with no network, no server and no Bluetooth pairing. Two physical channels are available, both one-way:
+**Signed documents over sound and light, with no network.** For a nurse, a savings-group treasurer or an aid worker whose network just dropped, GhostPacket seals a receipt, a prescription or a clinical photo into an Ed25519-signed frame and carries it to the next phone through the air: speaker → microphone, or screen → camera. The receiver proves who signed it, or rejects it with an exact reason (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …). A voucher is paid once, even offline.
 
-- **Sound**: a 4-FSK continuous-phase modem with Reed-Solomon, played on the speaker and decoded from the microphone.
-- **Light**: a Luby Transform fountain code shown as a burst of QR codes on screen and read by a camera. The receiver reconstructs the frame even when 30 to 50 % of the images are missed.
-
-The receiver checks CRC32, then Ed25519, and either shows the document or rejects it with an explicit code (`CRC32_MISMATCH`, `INVALID_SIGNATURE`, …).
+- **Try it in one click:** https://arthurnsongan.github.io/GhostPacket/ → *Launch the 20 s simulation*. No microphone, no camera, no install.
+- **Sound:** 4-FSK (133–333 bit/s), an OFDM chord (≈ 4 kbit/s) and an ultrasonic whisper (17.6–19.6 kHz). **Light:** fountain-coded QR codes and 8-color ChromaCrypt matrices (a 12 KB photo in ≈ 2.8 s with 30 % of the matrices lost). Optional ChaCha20-Poly1305 encryption; proofs sync to a Rust verifier when the network returns.
+- **Built with Kiro:** 9 EARS specs, 5 steering files, 4 hooks, an MCP inspector and a custom security-review agent that caught real bugs ([details](#how-we-built-ghostpacket-with-kiro)).
+- **Open source (MIT), built to outlive the hackathon:** a Rust/WASM core, a TypeScript SDK that works without a bundler, and a UI kit power two offline apps plus the portal.
 
 **Live:** https://arthurnsongan.github.io/GhostPacket/ with two apps built from the same skeleton:
 
@@ -21,7 +21,7 @@ The portal has four pages:
 
 | Page | What it shows |
 |---|---|
-| **Home** | the problem, three field use cases, measured numbers, a 1-click launcher |
+| **Home** | the problem, three field use cases, measured numbers, a 1-click launcher with a ghost guide, and what Kiro did (specs, steering, hooks, MCP, agent, real bugs caught) |
 | **How It Works** | animated pipeline, security threat model, SDK integration snippets, `.gpkt` wire format and a drag-and-drop verifier |
 | **Simulation** | the 1-click demo, your own message with optional end-to-end encryption, the Chimera dual-channel race, the tamper lab (click any byte), the Crypt Ledger |
 | **Test (PC ↔ Phone)** | real speaker → microphone and screen → camera transfer, identity QR and trusted keyring, anti-replay ledger |
@@ -62,7 +62,7 @@ The skeleton is `crates/ghostpacket-core` + `packages/ghostpacket-sdk` + `packag
 - lurking spectres animated with GSAP (glowing eyes, flicker, they dissolve near the pointer and lunge with "Boo." when clicked) that follow, retreat or close in with the protocol;
 - ghostly click sounds (moan, echoing giggle, whisper, bat squeak, pumpkin pop, whoosh) plus the protocol cues (theremin, clock bell, organ fifth, tritone, funeral bell) and an optional crypt drone — all synthesized, silent while the modem runs.
 
-Every sound is off by default and silenced instantly while the real modem plays or listens. **Clean Field Mode** removes the decoration for real clinics and markets.
+Sounds are on by default in Haunted Mode and silenced instantly while the real modem plays or listens. A rejection gets a joke and the next thing to tap ("Nice try, poltergeist: that bit didn't belong here."); **Clean Field Mode** removes the decoration and keeps sober wording for real clinics and markets.
 
 ```powershell
 npm run build:pages -- --base /GhostPacket   # portal + /clinic + /tontine merged into pages-out/
@@ -123,7 +123,7 @@ QR codes in the loopback are actually rendered on a canvas and read back with `j
 | Field mode in Chrome (fake mic, fake camera) | microphone: verified after 26.3 s (350-byte frame, robust mode, 23.6 s burst); camera: 20/20 blocks from blurred QR codes in 3.6 s |
 | Fountain decoding | 100 % of 100 seeds at 30, 40 and 50 % loss, ~1.23 K droplets received on average |
 | Rust tests | 91 in the core (protocol v1/v2 vectors incl. encryption, weak keys, hostile lengths and round ledgers, FSK (audible and ultrasonic) and OFDM channel fuzz, fountain fuzz, wide fountain and Chimera bundles, ChromaCrypt, vault) + 13 in the server verifier (real TCP) |
-| SDK package tests | 12 in Node (incl. sync against the real verifier and the redemption policy) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
+| SDK package tests | 16 in Node (incl. sync against the real verifier, the redemption policy, ultrasonic, Chimera bundles, round ledgers and the LAN code parser) + 11 in headless Chrome (every transmit / receive method with a fake mic and camera, sync 201 and 409) |
 | V3 apps (headless Chrome, `scripts/e2e/apps.mjs`) | 36/36: issuer vault created, wrong passphrase refused, same fingerprint after reload; ChromaCrypt photo at 30 % loss verified and shown; image over OFDM at 15 dB; E2EE image over Chimera Turbo (both lanes count), refused without the passphrase then unlocked; WebRTC LAN delivery; Ultrasonic Whisper identity pinned; tontine round ledger broadcast over OFDM; clinic ward → sign → virtual hand-over → dispense once → refuse twice; tontine receipt → wallet, voucher → pay out once → refuse twice; per-app storage isolation, Clean Field Mode, per-app worker scope, 0 error / external request / 404 |
 | SDK redemption policy (Node) | unpinned issuer, DEMO frame, expired voucher and future timestamp refused; guarded ledger cannot be cleared and fails closed on a storage error; namespaces isolate apps |
 | Portal browser checks (headless Chrome, `/GhostPacket/` base path) | 30/30: pages, demo < 20 s, E2EE, tamper lab, replay, race, `.gpkt` verifier, field mic + camera, outbox → verifier sync, offline reload, 0 console error, 0 external request, 0 404 |
@@ -145,12 +145,16 @@ The full specification, with the verification order and every error code, is in 
 V3 is a "Skeleton Crew" monorepo: one skeleton (the Rust core, the SDK and the UI kit) and apps built only from it.
 
 ```text
-crates/ghostpacket-core/     Rust → WASM: protocol, crypto, Reed-Solomon, FSK, fountain, channel simulator
+crates/ghostpacket-core/     Rust → WASM: GPKT v1/v2, Ed25519, ChaCha20-Poly1305, vault, Reed-Solomon, 4-FSK (audible + ultrasonic),
+                             OFDM, fountain codes, ChromaCrypt, channel simulator
 crates/ghostpacket-verifier/ native server verifier + anti-replay ledger (reuses ghostpacket-core)
-packages/ghostpacket-sdk/    TypeScript SDK: WASM bridge, transports, keyring, ledger, outbox (+ tests, example)
-packages/ghostpacket-ui/     shared React components: spectrogram, fountain grid, conduit, inspector, seal, …
+packages/ghostpacket-sdk/    TypeScript SDK: WASM bridge, transports, Chimera Turbo, LAN link, keyring, ledger, outbox (+ tests, example)
+packages/ghostpacket-ui/     shared React components: AirTransfer, HighSpeedLab, spectrogram, fountain grid, inspector, seal, …
 apps/portal/                 the GitHub Pages site (Home, How It Works, Simulation, Test)
+apps/ghost-clinic/           GhostClinic: ward, prescriptions, clinical photos, pharmacy (dispense once), sync
+apps/ghost-tontine/          GhostTontine: members, receipts, round ledger broadcast, aid vouchers (pay out once), sync
 mcp-server/                  MCP server ghostpacket-inspector (stdio)
+video/                       scripted recording and editing of the demo video (headless Chrome + ffmpeg)
 scripts/                     Node scripts called by the Kiro hooks, SDK build, asset sync, gh-pages deploy
 .kiro/                       steering, specs, hooks, agents, MCP settings
 .github/workflows/           GitHub Pages deployment
@@ -163,8 +167,8 @@ All cryptography, compression, DSP and coding runs in the Rust crate. TypeScript
 Requirements: Rust with `wasm32-unknown-unknown`, `wasm-pack`, and Node ≥ 23.6.
 
 ```powershell
-cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml       # 52 tests: vectors + fuzz
-cargo test --release --manifest-path crates/ghostpacket-verifier/Cargo.toml   # 12 tests, real TCP
+cargo test --release --manifest-path crates/ghostpacket-core/Cargo.toml       # 91 tests: vectors + fuzz
+cargo test --release --manifest-path crates/ghostpacket-verifier/Cargo.toml   # 13 tests, real TCP
 npm install                      # every workspace, one lockfile
 npm run wasm                     # wasm-pack → packages/ghostpacket-sdk/wasm, copied into each app's public/
 npm run build:portal             # static export in apps/portal/out
@@ -220,7 +224,7 @@ const report = await gp.syncProofs("https://verifier.example.org", { token });
 const stop = gp.enableAutoSync("https://verifier.example.org");  // sync each time the browser is back online
 ```
 
-`POST /v1/proofs` takes the raw frame (`Content-Type: application/octet-stream`, ≤ 512 bytes). The server bounds every request (5 s deadline, 2 KiB of headers, one `Content-Length`, ≤ 32 connections and 4 per IP, rate limit), only answers CORS for the one `--allow-origin`, writes each redemption to disk before answering 201, and echoes no document field for encrypted proofs. The site sends nothing until a verifier URL is typed in; the URL must be `https://`, or `http://` on localhost. Chrome may ask for "local network access" when the https site posts to a verifier on `localhost`.
+`POST /v1/proofs` takes the raw frame (`Content-Type: application/octet-stream`, ≤ 131 150 bytes, so GPKT v2 image frames fit). The server bounds every request (5 s deadline, 2 KiB of headers, one `Content-Length`, ≤ 32 connections and 4 per IP, rate limit), only answers CORS for the one `--allow-origin`, writes each redemption to disk before answering 201, and echoes no document field for encrypted proofs. The site sends nothing until a verifier URL is typed in; the URL must be `https://`, or `http://` on localhost. Chrome may ask for "local network access" when the https site posts to a verifier on `localhost`.
 
 Known limitation: whoever overhears a broadcast can upload it first, and the honest upload then shows as a replay. The token limits who can submit.
 
@@ -234,7 +238,7 @@ Live demo: **https://arthurnsongan.github.io/GhostPacket/**
 
 The base-path build was checked locally under `/GhostPacket/`: demo, WASM, AudioWorklet and fonts load with no 404.
 
-**Vercel / Netlify / Cloudflare Pages**: set the root directory to `web`, build command `npm run build`, output directory `out`.
+**Vercel / Netlify / Cloudflare Pages**: keep the repository root, build command `node scripts/build-pages.mjs` (add `--base /<path>` if the site is not served from the domain root), output directory `pages-out`.
 
 After rebuilding the WASM or editing the presets, reconnect the `ghostpacket-inspector` MCP server in Kiro: it loads both once at start-up.
 
@@ -251,15 +255,15 @@ If the sound path fails, lower the speaker volume (clipping), move closer, or cu
 
 ## How we built GhostPacket with Kiro
 
-- **Specs** (`.kiro/specs/`): seven specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`, `sdk-and-sync`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
-- **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `apps/*/src/**` and `packages/ghostpacket-ui/src/**` and carries the "Spectral Telemetry" visual system.
+- **Specs** (`.kiro/specs/`): nine specs (`core-system`, `binary-protocol`, `acoustic-fsk`, `optical-fountain`, `judge-demo-ui`, `platform-v2`, `sdk-and-sync`, `v3-skeleton-crew`, `high-speed-transports`) with EARS requirements, a design and a task list. The design docs record the measured results and the decisions that came out of failing tests.
+- **Steering** (`.kiro/steering/`): `product`, `tech` and `structure` are always included. `wasm-determinism` is loaded on `crates/**/*.rs` and forbids panics, implicit randomness and unbounded allocations. `ui-design-system` is loaded on `apps/*/src/**` and `packages/ghostpacket-ui/src/**` and carries the "Midnight Atelier" visual system (tonal selection, one warm accent, the haunted graveyard layer).
 - **Hooks** (`.kiro/hooks/`, v1 format):
-  - `fuzz-noise-channel` runs the acoustic and optical fuzz suites whenever a codec file is saved.
+  - `fuzz-noise-channel` runs the FSK, OFDM, fountain, GPKT v2, ChromaCrypt and vault tests whenever a codec file is saved.
   - `wasm-no-panic-guard` rejects `unwrap`, `expect` and `panic!` in `src/`.
   - `ts-typecheck-on-save` runs `tsc --noEmit`.
   - `kiroween-audit` runs on `Stop` and checks `.kiro/` tracking, secrets, the licence, WASM size and the full test suite.
-- **Custom agent** (`.kiro/agents/dsp-security-auditor.md`): a read-only reviewer for DSP correctness and security. It audited V2 before release; its findings (decrypted titles written to the ledger, mic failure above 50 kHz, PBKDF2 cost, key zeroization, NFC passphrases, empty-passphrase fallback) were fixed and are listed in `.kiro/specs/platform-v2/design.md`.
-- **MCP** (`mcp-server/`): `ghostpacket-inspector` loads the same `.wasm` binary as the browser and exposes three tools: `inspect_frame_hex`, `run_channel_benchmark` and `check_kiroween_compliance`.
+- **Custom agent** (`.kiro/agents/dsp-security-auditor.md`): a read-only reviewer for DSP correctness and security. It audited V2 before release; its findings (decrypted titles written to the ledger, mic failure above 50 kHz, PBKDF2 cost, key zeroization, NFC passphrases, empty-passphrase fallback) were fixed and are listed in `.kiro/specs/platform-v2/design.md`. It reviewed each V3 phase too: a crafted stripe image that stalled the ChromaCrypt reader, a decoder locked on a stale session, unpinned photo links shown as trusted, LAN pairing codes that accepted public IP addresses, and one forged OFDM burst able to reset a transfer. All were fixed with a test.
+- **MCP** (`mcp-server/`): `ghostpacket-inspector` loads the same `.wasm` binary as the browser and exposes three tools: `inspect_frame_hex` (with a passphrase for E2EE frames), `run_channel_benchmark` (FSK, QR, OFDM, ChromaCrypt and ultrasonic) and `check_kiroween_compliance`.
 
 The fuzz hook caught two real bugs in the fountain code:
 - The low bits of `xorshift64*` are weak, so one block was never covered on some sessions.
@@ -274,8 +278,8 @@ An "air" test (clock drift between devices plus room echo) then showed the acous
 - The signing key comes from 32 bytes of `crypto.getRandomValues`, stays in the tab's memory and is never sent anywhere.
 - The issuer's public key is inside the signed document. An optional keyring rejects unknown issuers with `UNTRUSTED_ISSUER`.
 - Optional end-to-end encryption (ChaCha20-Poly1305, PBKDF2-HMAC-SHA256 40 000 iterations, NFC passphrase, fresh 16-byte salt per frame). Derived keys and decrypted plaintext are zeroized in WASM. The ledger and keyring store public data only (ids, fingerprints, public keys), never message text.
-- Untrusted lengths are bounded before allocation: frame ≤ 512 bytes, decompressed size ≤ 4096 bytes (LZ4 bomb blocked), ≤ 256 pending droplets.
-- No network call at runtime: fonts are self-hosted and the WASM is served from the same origin. The only exception is opt-in proof sync to a verifier URL you enter; the token stays in memory.
+- Untrusted lengths are bounded before allocation: v1 frame ≤ 512 bytes and decompressed ≤ 4096 bytes, v2 frame ≤ 131 150 bytes and decompressed ≤ 136 KB (LZ4 bomb blocked), image ≤ 64 KB, ≤ 64 ledger entries, ≤ 256 pending droplets, Chimera bundles ≤ 16 KB, camera images ≤ 4096 × 4096 px.
+- No network call at runtime: fonts are self-hosted and the WASM is served from the same origin. The only exceptions are opt-in: proof sync to a verifier URL you enter (the token stays in memory), and the WebRTC LAN link you pair yourself (host candidates only, no STUN, TURN or signaling server; pairing codes outside the local network are refused).
 - The server verifier was reviewed by `dsp-security-auditor`; its findings (whole-request deadline, strict HTTP parsing, origin check, connection and rate limits, weak keys accepted for pinning, decryption oracle, ledger durability) were fixed and are covered by `crates/ghostpacket-verifier/tests/verifier.rs`.
 
 ## Licence

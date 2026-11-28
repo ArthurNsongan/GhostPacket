@@ -8,6 +8,7 @@ import AppFrame, { navPillClass } from "ghostpacket-ui/AppFrame";
 import { useShell } from "ghostpacket-ui/GhostContext";
 
 import KiroTelemetry from "./KiroTelemetry";
+import { OPEN_TELEMETRY } from "./OpenTelemetryButton";
 
 export { useShell, WithGhost, type GhostState } from "ghostpacket-ui/GhostContext";
 
@@ -28,6 +29,11 @@ const APPS = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [telemetry, setTelemetry] = useState(false);
+  useEffect(() => {
+    const open = () => setTelemetry(true);
+    window.addEventListener(OPEN_TELEMETRY, open);
+    return () => window.removeEventListener(OPEN_TELEMETRY, open);
+  }, []);
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href.replace(/\/$/, "")));
 
   return (

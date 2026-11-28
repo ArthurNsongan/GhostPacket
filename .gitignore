@@ -135,3 +135,8 @@ apps/*/public/worklets/
 pages-out/
 *.tgz
 proofs.jsonl
+# Demo video pipeline: frames, clips and renders are rebuilt by video/*.mjs
+video/work/
+video/footage/*
+!video/footage/README.md
+video/voice/*.wav

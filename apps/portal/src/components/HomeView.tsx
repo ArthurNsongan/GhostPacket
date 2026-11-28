@@ -1,6 +1,10 @@
 import Link from "next/link";
 
+import GhostGuide from "ghostpacket-ui/GhostGuide";
+
 import { BUILD_INFO } from "@/lib/build-info";
+
+import OpenTelemetryButton from "./OpenTelemetryButton";
 
 const CASES = [
   {
@@ -41,10 +45,18 @@ const APPS = [
 ] as const;
 
 const STATS = [
+  { value: "≈ 2.8 s", label: "for a 12 KB clinical photo over ChromaCrypt, 30 % of matrices lost" },
   { value: "≈ 1 ms", label: "to sign a document (Ed25519, in the browser)" },
-  { value: "50 %", label: "of QR frames lost and still rebuilt" },
-  { value: `${BUILD_INFO.wasmGzipKb} KB`, label: "Rust → WASM core, gzip" },
   { value: "±300 ppm", label: "clock drift and room echo survived over sound" },
+  { value: `${BUILD_INFO.wasmGzipKb} KB`, label: "Rust → WASM core, gzip" },
+];
+
+/** Bugs that Kiro's hooks, spec tests and review agent caught before release (recorded in each spec's design.md). */
+const CAUGHT = [
+  { by: "fuzz hook", text: "The low bits of xorshift64* were weak: on some sessions one fountain block was never covered." },
+  { by: "spec test", text: "±100 ppm of clock drift plus room echo broke the FSK modem; an early-late timing tracker now holds ±300 ppm." },
+  { by: "fuzz suite", text: "The OFDM clock tracker integrated half the slip rate and drifted out of the cyclic prefix at ±300 ppm." },
+  { by: "auditor agent", text: "Decrypted titles written to the ledger, a stripe image that stalled the ChromaCrypt reader, LAN codes accepting public IPs." },
 ];
 
 const RECEIPT = [
@@ -68,12 +80,18 @@ export default function HomeView() {
             <em className="text-accent">with no network at all.</em>
           </h1>
           <p className="mt-7 max-w-2xl text-[17px] leading-relaxed text-mist">
-            GhostPacket seals a receipt, a prescription or any message into an
-            Ed25519-signed frame of at most 512 bytes, then carries it from one
-            device to another over <span className="text-ink">sound</span> (a
-            4-FSK modem) or <span className="text-ink">light</span>{" "}
-            (fountain-coded QR codes). The receiver proves it is authentic, or
-            rejects it with an exact reason.
+            For a nurse, a savings-group treasurer or an aid worker whose
+            network just dropped: GhostPacket seals a receipt, a prescription or
+            a 12 KB clinical photo into an Ed25519-signed frame (optionally
+            encrypted) and carries it to the next phone over{" "}
+            <span className="text-ink">sound</span> (4-FSK, or a 4 kbit/s OFDM
+            chord) or <span className="text-ink">light</span> (fountain QR
+            codes, or 8-color ChromaCrypt matrices).
+          </p>
+          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-mist">
+            The receiver proves who signed it, or rejects it with an exact
+            reason. A voucher is paid once, even offline, and the proofs sync to
+            a verifier when the network returns.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <Link
@@ -96,6 +114,11 @@ export default function HomeView() {
             No microphone, no camera, no install. Works offline after the first
             visit.
           </p>
+          <GhostGuide id="home-demo">
+            Psst… tap <span className="text-accent">Launch the 20 s simulation</span>{" "}
+            to watch sound and light deliver a signed receipt in about 15 s. No
+            microphone or camera needed.
+          </GhostGuide>
         </div>
 
         {/* A sealed document, as the receiver sees it. */}
@@ -229,6 +252,57 @@ export default function HomeView() {
         </div>
       </section>
 
+      <section aria-labelledby="kiro" className="rise">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h2
+            id="kiro"
+            className="display text-[clamp(2rem,3.4vw,2.8rem)] leading-tight text-ink"
+          >
+            Built end-to-end <em className="text-accent">with Kiro</em>
+          </h2>
+          <OpenTelemetryButton className="btn-tonal px-5 py-2.5 text-sm">
+            Open Kiro Telemetry
+          </OpenTelemetryButton>
+        </div>
+        <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-mist">
+          In one hackathon: a Rust → WASM codec with three acoustic modems
+          (4-FSK, OFDM, ultrasonic), two optical codes (fountain QR, ChromaCrypt),
+          Ed25519 and ChaCha20-Poly1305, a native verifier, an SDK, a UI kit,
+          two offline apps and this portal. Kiro held it together with specs
+          before code, guardrails on every save, and a reviewer before every
+          release.
+        </p>
+        <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { n: BUILD_INFO.specs.length, what: "EARS specs", detail: "requirements, design, tasks for every feature" },
+            { n: BUILD_INFO.steering.length, what: "steering files", detail: "no panic, no hidden randomness, bounded memory in WASM" },
+            { n: BUILD_INFO.hooks.length, what: "hooks", detail: "channel fuzzing and a panic guard on save, an audit on stop" },
+            { n: BUILD_INFO.mcpTools.length, what: "MCP tools", detail: "ghostpacket-inspector decodes frames and benchmarks channels" },
+            { n: BUILD_INFO.agents.length, what: "custom agent", detail: "dsp-security-auditor reviewed every phase" },
+          ].map((k) => (
+            <div key={k.what} className="panel p-5">
+              <div className="font-mono text-[1.7rem] font-medium text-ink">{k.n}</div>
+              <div className="mt-1 text-[13px] font-medium text-ink">{k.what}</div>
+              <div className="mt-1 text-[12px] leading-snug text-mist">{k.detail}</div>
+            </div>
+          ))}
+        </div>
+        <div className="panel mt-4 p-6">
+          <p className="panel-title">Real bugs caught before release</p>
+          <ul className="mt-4 grid gap-x-8 gap-y-3 md:grid-cols-2">
+            {CAUGHT.map((c) => (
+              <li key={c.text} className="text-sm leading-relaxed text-mist">
+                <span className="mr-2 rounded-full bg-phosphor/12 px-2 py-0.5 font-mono text-[11px] text-phosphor">{c.by}</span>
+                {c.text}
+              </li>
+            ))}
+          </ul>
+          <a href={`${BUILD_INFO.repository}/tree/main/.kiro`} className="mt-5 inline-block text-sm text-accent hover:underline" target="_blank" rel="noreferrer">
+            Read the .kiro/ folder on GitHub ↗
+          </a>
+        </div>
+      </section>
+
       <section className="rise grid gap-4 md:grid-cols-2">
         <article className="panel p-7">
           <h2 className="display text-[1.9rem] text-ink">
@@ -272,6 +346,13 @@ export default function HomeView() {
             Seal, send, receive and verify in a few lines, then sync the
             verified <span className="font-mono text-ink">.gpkt</span> proofs to
             your backend when connectivity returns.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-mist">
+            Built to outlive the hackathon: MIT-licensed, usable from a plain{" "}
+            <span className="font-mono text-ink">&lt;script type=&quot;module&quot;&gt;</span>{" "}
+            with no bundler, a self-hostable Rust verifier, and a one-click{" "}
+            <span className="text-ink">Clean Field Mode</span> for a real clinic
+            or savings group.
           </p>
           <pre className="mt-5 overflow-x-auto rounded-xl bg-void/70 p-4 font-mono text-[12px] leading-relaxed text-ink/90">{`const gp = await GhostPacketSDK.load();
 const sealed = gp.sealMessage({ sender, title, message });

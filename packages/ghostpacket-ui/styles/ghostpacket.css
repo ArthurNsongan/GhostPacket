@@ -568,3 +568,18 @@ input[type="range"] {
   backdrop-filter: blur(10px) saturate(1.15);
   -webkit-backdrop-filter: blur(10px) saturate(1.15);
 }
+
+/* Ghost guide (GhostGuide.tsx): a slow bob beside the hint, Haunted Mode only. */
+.guide-whisper svg {
+  animation: guide-bob 3.2s ease-in-out infinite;
+}
+@keyframes guide-bob {
+  50% {
+    transform: translateY(-4px) rotate(-3deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-whisper svg {
+    animation: none;
+  }
+}

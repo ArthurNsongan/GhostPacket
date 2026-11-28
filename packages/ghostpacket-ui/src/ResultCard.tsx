@@ -8,7 +8,58 @@ import type { LedgerCheck } from "ghostpacket-sdk/ledger";
 import { ledgerTotal } from "ghostpacket-sdk/ledger-batch";
 import { docTitle } from "ghostpacket-sdk/messages";
 import type { DocumentBody, VerifiedFrame } from "ghostpacket-sdk/types";
+import { currentTheme, onThemeChange, type Theme } from "ghostpacket-sdk/theme";
 import { sfx } from "ghostpacket-sdk/ui-sfx";
+
+/** Current Haunted / Clean Field theme, kept in sync with the header switch. */
+function useHaunted(): boolean {
+  const [theme, setThemeState] = useState<Theme>("haunted");
+  useEffect(() => {
+    setThemeState(currentTheme());
+    return onThemeChange(setThemeState);
+  }, []);
+  return theme === "haunted";
+}
+
+/**
+ * Rejection headline and the next thing to tap. Haunted Mode jokes; Clean
+ * Field Mode stays sober for clinics and treasurers. The machine code above
+ * the headline never changes.
+ */
+export function errorFlavor(code: string, haunted: boolean): { headline: string; nextTap: string } {
+  switch (code) {
+    case "CRC32_MISMATCH":
+      return {
+        headline: haunted ? "Nice try, poltergeist: that bit didn't belong here." : "Frame corrupted in transit (checksum mismatch).",
+        nextTap: "Next: ask the sender to send it again, or tap ‘Restore intact frame’ in the tamper lab.",
+      };
+    case "INVALID_SIGNATURE":
+      return {
+        headline: haunted ? "Impostor ghost! That wax seal is a fake." : "Signature verification failed.",
+        nextTap: "Next: request a frame signed by the real issuer, or tap ‘Restore intact frame’ in the tamper lab.",
+      };
+    case "UNTRUSTED_ISSUER":
+      return {
+        headline: haunted ? "Stranger danger in the graveyard: unknown signer." : "The signer is not in this device's trusted keyring.",
+        nextTap: "Next: pin this issuer (identity QR or Ultrasonic Whisper), or turn off strict mode.",
+      };
+    case "PASSPHRASE_REQUIRED":
+      return {
+        headline: haunted ? "Sealed by a spell: this one only opens with a passphrase." : "The payload is encrypted.",
+        nextTap: "Next: enter the passphrase the sender shared with you, then verify again.",
+      };
+    case "DECRYPTION_FAILED":
+      return {
+        headline: haunted ? "Wrong spell! The spirits won't whisper without the right passphrase." : "The payload cannot be decrypted with this passphrase.",
+        nextTap: "Next: check the passphrase with the sender (same words, same spelling) and verify again.",
+      };
+    default:
+      return {
+        headline: haunted ? "Pure ectoplasm static: this frame is broken." : "Malformed frame.",
+        nextTap: "Next: send or scan it again from the start, closer and with less noise.",
+      };
+  }
+}
 
 function amount(minor: number, currency: string): string {
   const decimals = ["XOF", "XAF", "JPY", "GNF", "RWF"].includes(currency) ? 0 : 2;
@@ -201,6 +252,7 @@ export default function ResultCard({
   /** No Blood Moon / sound (e.g. intermediate states). */
   silent?: boolean;
 }) {
+  const haunted = useHaunted();
   const state = verification ? (verification.ok ? (replay?.status === "replay" ? "replay" : "ok") : "rejected") : null;
   useEffect(() => {
     if (silent || !state) return;
@@ -224,13 +276,15 @@ export default function ResultCard({
     );
   }
   if (!verification.ok) {
+    const flavor = errorFlavor(verification.error.code, haunted);
     return (
       <div className="tampered flex gap-3 rounded-lg bg-alarm/10 p-4" role="alert">
         <Seal broken />
         <div>
           <div className="chroma font-mono text-sm font-bold tracking-widest text-alarm glow-alarm">REJECTED · {verification.error.code}</div>
-          <p className="display text-lg italic text-ink/90">Corrupted spirit rejected</p>
+          <p className="display text-lg italic text-ink/90">{flavor.headline}</p>
           <p className="mt-1 text-sm text-ink">{verification.error.message}</p>
+          <p className="mt-2 rounded-md bg-ink/[0.05] px-2.5 py-1.5 text-[13px] text-ink">{flavor.nextTap}</p>
           <p className="mt-1 text-xs text-mute">Channel: {channel}. The document is not shown.</p>
         </div>
       </div>
@@ -258,9 +312,11 @@ export default function ResultCard({
       {replay?.status === "replay" && (
         <div className="tampered mt-2 rounded-md bg-amber/10 px-3 py-2" role="alert">
           <p className="font-mono text-xs font-bold tracking-widest text-amber">REPLAY DETECTED · ALREADY REDEEMED</p>
+          {haunted && <p className="display text-[15px] italic text-ink/90">Deja-boo! This document already walked out of the crypt once.</p>}
           <p className="text-[12px] text-ink">
             Same issuer and document id first redeemed via {replay.entry.channel} at {new Date(replay.entry.firstSeen).toLocaleTimeString("en-GB")}. A second presentation must be refused.
           </p>
+          <p className="mt-1 text-[12px] text-mist">Next: refuse it, and ask the issuer for a new document if this one was lost. Duplicates are never paid twice.</p>
         </div>
       )}
       {replay?.status === "first" && <p className="font-mono text-[11px] text-phosphor">First redemption · recorded in the Crypt Ledger</p>}

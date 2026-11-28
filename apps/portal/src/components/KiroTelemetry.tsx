@@ -16,6 +16,11 @@ const OPS: { op: string; label: string; budget: number }[] = [
   { op: "fsk_demodulate", label: "FSK demodulate", budget: 500 },
   { op: "fft", label: "FFT 1024", budget: 5 },
   { op: "droplet_ingest", label: "Fountain ingest", budget: 2 },
+  { op: "encode_v2", label: "Encode GPKT v2 (image) + sign", budget: 50 },
+  { op: "chroma_scan", label: "ChromaCrypt scan (camera image)", budget: 5 },
+  { op: "chroma_ingest_bundle", label: "Chimera bundle ingest", budget: 10 },
+  { op: "ofdm_modulate", label: "OFDM modulate", budget: 500 },
+  { op: "ofdm_demodulate", label: "OFDM demodulate", budget: 500 },
 ];
 
 /** Drawer with live WASM latencies, binary size and the `.kiro/` architecture. */

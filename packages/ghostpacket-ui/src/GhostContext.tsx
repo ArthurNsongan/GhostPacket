@@ -162,6 +162,15 @@ export function IdentityGate({ controls }: { controls: IdentityControls }) {
 
   return (
     <section className="panel mx-auto flex w-full max-w-xl flex-col gap-3 p-8" aria-labelledby="identity-title">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent/10 px-4 py-3">
+        <p className="text-[13px] text-ink">
+          Judging or just looking? <span className="text-mist">One click, nothing stored.</span>
+        </p>
+        <button type="button" disabled={busy} onClick={controls.useSessionKey} className="btn-accent px-5 py-2 text-sm font-medium">
+          Continue with a session key (demo)
+        </button>
+        <p className="w-full font-mono text-[10px] text-mute">A session key changes on every reload: receivers would have to pin it again.</p>
+      </div>
       <p className="panel-title">Issuer identity</p>
       <h2 id="identity-title" className="display text-3xl text-ink">
         {creating ? (
@@ -228,11 +237,7 @@ export function IdentityGate({ controls }: { controls: IdentityControls }) {
             {busy ? "Unlocking…" : "Unlock"}
           </button>
         )}
-        <button type="button" disabled={busy} onClick={controls.useSessionKey} className="btn-tonal rounded-full px-5 py-2.5 text-sm">
-          Continue with a session key (demo)
-        </button>
       </div>
-      <p className="font-mono text-[10px] text-mute">A session key changes on every reload: receivers would have to pin it again.</p>
     </section>
   );
 }

@@ -8,12 +8,12 @@
 // Portal high-speed lab: OFDM image, E2EE image over Chimera Turbo, WebRTC LAN, Ultrasonic Whisper.
 // Both: storage isolation, Clean Field Mode, service worker scope, no error, no external request, no 404.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { tempDir, track } from "../lib/temp.mjs";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
 const OUT = resolve(root, process.argv[2] ?? "pages-out");
@@ -64,7 +64,7 @@ const server = createServer(async (req, res) => {
 });
 if (!LIVE) server.listen(PORT, "127.0.0.1");
 
-const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${DBG}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "gp-apps-"))}`, "--autoplay-policy=no-user-gesture-required", "--window-size=1440,1000", "about:blank"], { stdio: "ignore" });
+const chrome = track(spawn(CHROME, ["--headless=new", `--remote-debugging-port=${DBG}`, `--user-data-dir=${tempDir("gp-apps-")}`, "--autoplay-policy=no-user-gesture-required", "--window-size=1440,1000", "about:blank"], { stdio: "ignore" }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 60; i++) {
@@ -278,14 +278,14 @@ const typed = await typeIn(lab, "Receiver passphrase", PASS);
 await sleep(300);
 await click("Decrypt and verify");
 const opened = await until(`/Chimera Turbo · \\d+ B · CRC32/.test(document.body.innerText) && [...document.images].some((i) => i.src.startsWith("blob:") && i.naturalWidth > 0)`, 10000);
-check("portal: E2EE image decrypted with the shared passphrase, verified and shown", opened, opened ? "" : String(await ev(`document.body.innerText`)).match(/(Corrupted spirit rejected|ED25519 VERIFIED|Receiver passphrase)[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## "));
+check("portal: E2EE image decrypted with the shared passphrase, verified and shown", opened, opened ? "" : String(await ev(`document.body.innerText`)).match(/(REJECTED ·|ED25519 VERIFIED|Receiver passphrase)[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## "));
 // WebRTC LAN, two peers in the page, signaled through real QR rendering and reading.
 await click("WebRTC LAN");
 await click("Send over a virtual WebRTC LAN link");
 const lan = await until(`(document.body.innerText.match(/WebRTC LAN · offer \\d+ chars[^\\n]*delivered in \\d+ ms/) || [])[0]`, 45000);
-if (!lan) console.log("debug LAN:", String(await ev(`document.body.innerText`)).match(/Send over a virtual WebRTC LAN link[^]*?(?=Waiting for|Corrupted|ED25519|$)/)?.[0]?.slice(0, 400));
+if (!lan) console.log("debug LAN:", String(await ev(`document.body.innerText`)).match(/Send over a virtual WebRTC LAN link[^]*?(?=Waiting for|REJECTED|ED25519|$)/)?.[0]?.slice(0, 400));
 const lanOk = await until(`/WebRTC LAN · \\d+ B · CRC32/.test(document.body.innerText) && document.body.innerText.includes("ED25519 VERIFIED")`, 5000);
-check("portal: WebRTC LAN link (QR-signaled, no server) delivers the frame", lan && lanOk, lanOk ? lan : `${lan} ## ${String(await ev(`document.body.innerText`)).match(/(Corrupted spirit rejected|ED25519 VERIFIED)[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## ")}`);
+check("portal: WebRTC LAN link (QR-signaled, no server) delivers the frame", lan && lanOk, lanOk ? lan : `${lan} ## ${String(await ev(`document.body.innerText`)).match(/(REJECTED ·|ED25519 VERIFIED)[^\n]*\n[^\n]*\n[^\n]*/g)?.join(" ## ")}`);
 // Ultrasonic Whisper: identity card at 17.6–19.6 kHz, then pin.
 await click("Whisper the identity card");
 const whisper = await until(`document.body.innerText.includes("IDENTITY CARD · ED25519 VERIFIED") && (document.body.innerText.match(/Ultrasonic whisper · \\d+ B in [^\\n]*/) || [])[0]`, 30000);

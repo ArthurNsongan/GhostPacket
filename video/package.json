@@ -1,0 +1,14 @@
+{
+  "name": "ghostpacket-demo-video",
+  "private": true,
+  "type": "module",
+  "description": "Scripted recording and editing of the GhostPacket demo video (headless Chrome + ffmpeg + offline narration).",
+  "scripts": {
+    "pages": "node ../scripts/build-pages.mjs --base /GhostPacket",
+    "narrate": "node narrate.mjs",
+    "capture": "node capture.mjs",
+    "assemble": "node assemble.mjs",
+    "smoke": "node narrate.mjs --only 01-open,02-problem && node capture.mjs --only 01-open,02-problem && node assemble.mjs --only 01-open,02-problem --no-burn",
+    "all": "node narrate.mjs && node capture.mjs && node assemble.mjs"
+  }
+}
