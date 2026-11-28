@@ -8,12 +8,12 @@
 // Portal high-speed lab: OFDM image, E2EE image over Chimera Turbo, WebRTC LAN, Ultrasonic Whisper.
 // Both: storage isolation, Clean Field Mode, service worker scope, no error, no external request, no 404.
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { tempDir, track } from "../lib/temp.mjs";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
 const OUT = resolve(root, process.argv[2] ?? "pages-out");
@@ -64,7 +64,7 @@ const server = createServer(async (req, res) => {
 });
 if (!LIVE) server.listen(PORT, "127.0.0.1");
 
-const chrome = track(spawn(CHROME, ["--headless=new", `--remote-debugging-port=${DBG}`, `--user-data-dir=${tempDir("gp-apps-")}`, "--autoplay-policy=no-user-gesture-required", "--window-size=1440,1000", "about:blank"], { stdio: "ignore" }));
+const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${DBG}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "gp-apps-"))}`, "--autoplay-policy=no-user-gesture-required", "--window-size=1440,1000", "about:blank"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 60; i++) {
