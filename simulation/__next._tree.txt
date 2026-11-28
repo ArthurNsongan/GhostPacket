@@ -1,5 +1,5 @@
-:HL["/GhostPacket/_next/static/chunks/21tuyznbqdcrl.css","style"]
+:HL["/GhostPacket/_next/static/chunks/1cuw_wkrhf970.css","style"]
 :HC["/",""]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"simulation","h":96,"c":"$Q2"}]]
-0:{"b":"OxWWkLCfSDRWtgyN_g8n6","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"emH7uHEjKRcRg1p3o-PGk","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
